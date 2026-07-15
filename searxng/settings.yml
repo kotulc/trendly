@@ -1,0 +1,11 @@
+# SearXNG overrides for trendly: enable the JSON API and disable the rate limiter locally.
+use_default_settings: true
+
+server:
+  secret_key: "trendly-local-dev-secret-change-me"
+  limiter: false
+
+search:
+  formats:
+    - html
+    - json

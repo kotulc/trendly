@@ -1,0 +1,36 @@
+# Trendly server configuration: local paths, external services, per-command defaults.
+data_dir: data      # topic profiles, digests, sqlite db
+output_dir: output  # generated rss feed
+
+# External services; `trendly check` pings each url. The llm entry works with any
+# OpenAI-compatible server: LM Studio (:1234), Ollama (:11434/v1), vLLM, etc.
+services:
+  searxng: http://localhost:8080
+  taggly: http://localhost:8000
+  llm:
+    url: http://localhost:1234/v1
+    model: local-model      # model id to request; LM Studio uses whatever is loaded
+    api_key: not-needed     # any non-empty string for local servers
+
+# Per-command config sections; keys map onto each command's Config model.
+commands:
+  check:
+    timeout: 3.0
+  search:
+    categories: news
+    time_range: week
+    top_n: 20
+  extract:
+    min_length: 400   # chars of markdown below which the crawl4ai fallback kicks in
+    timeout: 20.0
+  enrich:
+    top_n: 8          # tags requested from taggly per article
+    timeout: 30.0
+  judge:
+    max_articles: 25  # set `model:` here to override the services.llm default
+  digest: {}
+  publish:
+    title: Trendly
+    link: http://localhost:8100
+    max_items: 50
+  run: {}
