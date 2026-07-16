@@ -1,7 +1,9 @@
-# Local SearXNG meta search engine used by the `search` command.
+# Local services used by the pipeline: SearXNG meta search and the Taggly NLP api.
 services:
   searxng:
-    image: searxng/searxng:latest
+    # ghcr.io mirror: docker hub blobs come from a cloudfront route that drops
+    # on this network's flaky ipv6 path; github's cdn is unaffected
+    image: ghcr.io/searxng/searxng:latest
     container_name: trendly-searxng
     ports:
       - "8080:8080"
@@ -9,4 +11,13 @@ services:
       - ./searxng:/etc/searxng
     environment:
       - SEARXNG_BASE_URL=http://localhost:8080/
+    restart: unless-stopped
+
+  taggly:
+    # Bundles cpu torch + default models; serves offline (HF_HUB_OFFLINE=1 in the image).
+    # For gated models (Gemma), mount your HF cache and pass HF_TOKEN — see taggly's Dockerfile.
+    image: ghcr.io/kotulc/taggly:latest
+    container_name: trendly-taggly
+    ports:
+      - "8000:8000"
     restart: unless-stopped

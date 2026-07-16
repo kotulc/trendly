@@ -221,3 +221,4 @@ __marimo__/
 data/digests/
 data/trendly.db
 output/
+dashboard/dist/

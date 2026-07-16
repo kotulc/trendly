@@ -1,5 +1,7 @@
 """Article record passed between pipeline stages; fields fill in as stages run."""
 
+from urllib.parse import urlparse
+
 from pydantic import BaseModel
 
 
@@ -12,5 +14,10 @@ class Article(BaseModel):
     tags: list[str] = []
     entities: list[str] = []
     score: float = 0.0
+    dup_score: float = 0.0  # max similarity to items the user deleted
     relevant: bool = False
     summary: str = ""
+
+    def domain(self) -> str:
+        """Source domain, the unit that can be followed or unfollowed."""
+        return urlparse(self.url).netloc

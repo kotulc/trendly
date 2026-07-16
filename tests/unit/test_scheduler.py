@@ -3,11 +3,10 @@
 from trendly.scheduler import start_scheduler
 
 
-def test_scheduler_adds_topic_jobs(sample_topic, echo_registry):
+def test_scheduler_adds_topic_jobs(sample_topic):
     """Topics with a cron schedule get one named run job."""
-    scheduler = start_scheduler({"run": echo_registry["echo"]})
+    scheduler = start_scheduler()
     try:
-        jobs = scheduler.get_jobs()
-        assert [job.id for job in jobs] == [sample_topic]
+        assert [job.id for job in scheduler.get_jobs()] == [sample_topic]
     finally:
         scheduler.shutdown(wait=False)

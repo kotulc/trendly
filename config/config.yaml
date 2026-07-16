@@ -1,6 +1,7 @@
 # Trendly server configuration: local paths, external services, per-command defaults.
-data_dir: data      # topic profiles, digests, sqlite db
-output_dir: output  # generated rss feed
+data_dir: data                 # topic profiles, digests, sqlite db
+output_dir: output             # generated rss feed
+dashboard_dir: dashboard/dist  # built mdsite export served at / (see dashboard/mdsite.yaml)
 
 # External services; `trendly check` pings each url. The llm entry works with any
 # OpenAI-compatible server: LM Studio (:1234), Ollama (:11434/v1), vLLM, etc.
@@ -12,8 +13,8 @@ services:
     model: local-model      # model id to request; LM Studio uses whatever is loaded
     api_key: not-needed     # any non-empty string for local servers
 
-# Per-command config sections; keys map onto each command's Config model.
-commands:
+# Per-step config sections; keys map onto each core module's Config model.
+core:
   check:
     timeout: 3.0
   search:
@@ -22,13 +23,12 @@ commands:
     top_n: 20
   extract:
     min_length: 400   # chars of markdown below which the crawl4ai fallback kicks in
-    timeout: 20.0
   enrich:
     top_n: 8          # tags requested from taggly per article
     timeout: 30.0
   judge:
-    max_articles: 25  # set `model:` here to override the services.llm default
-  digest: {}
+    max_articles: 25       # set `model:` here to override the services.llm default
+    dup_threshold: 0.75    # similarity to a deleted item above which articles are blocked
   publish:
     title: Trendly
     link: http://localhost:8100

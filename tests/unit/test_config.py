@@ -16,10 +16,10 @@ def test_load_config_reads_env_path(sample_config):
     assert "services" in config.load_config()
 
 
-def test_command_config_section(sample_config):
-    """Per-command sections are returned by name, empty when absent."""
-    assert config.command_config("check") == {"timeout": 1.5}
-    assert config.command_config("unknown") == {}
+def test_core_config_section(sample_config):
+    """Per-step sections are returned by name, empty when absent."""
+    assert config.core_config("check") == {"timeout": 1.5}
+    assert config.core_config("unknown") == {}
 
 
 def test_service_url_merges_defaults(sample_config):

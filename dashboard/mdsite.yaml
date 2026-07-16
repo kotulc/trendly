@@ -1,0 +1,11 @@
+# Trendly dashboard site — built with mdsite (https://github.com/kotulc/mdsite).
+# Build: node ../mdsite/scripts/cli.js build --config dashboard/mdsite.yaml
+title: Trendly
+repo_url: https://github.com/kotulc/trendly
+theme_toggle: navbar
+toc: false
+meta_sidebar: false
+
+content: ./content
+components: ./components
+output: ./dist

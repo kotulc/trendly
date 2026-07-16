@@ -1,50 +1,26 @@
-"""Generate FastAPI endpoints from the command registry; one POST route per command."""
+"""FastAPI app: pipeline step endpoints plus the static mdsite dashboard export."""
 
-import inspect
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
-from fastapi import Depends, FastAPI
+from trendly.config import dashboard_dir
+from trendly.core import check, digest, enrich, extract, items, judge, publish, run, search
 
-from trendly.models.base import AbstractBaseCommand
 
-
-def build_app(commands: dict[str, AbstractBaseCommand]) -> FastAPI:
-    """Create the API app with a typed POST /{name} endpoint for every command."""
+def build_app() -> FastAPI:
+    """Assemble the app: core routers under /api, dashboard static files at /."""
     app = FastAPI(title="trendly", description="AI powered news aggregator")
 
-    for name, cmd in commands.items():
-        app.post(f"/{name}", response_model=cmd.Output, summary=_summary(cmd))(_endpoint(cmd))
+    # Allow the mdsite dev server (next dev) to call the api cross-origin locally
+    app.add_middleware(CORSMiddleware, allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
+                       allow_methods=["*"], allow_headers=["*"])
+
+    for module in (search, extract, enrich, judge, digest, publish, run, check, items):
+        app.include_router(module.router, prefix="/api")
+
+    dist = dashboard_dir()
+    if dist.is_dir():
+        app.mount("/", StaticFiles(directory=dist, html=True), name="dashboard")
 
     return app
-
-
-def serve(commands: dict[str, AbstractBaseCommand]) -> int:
-    """Run the API server plus the topic scheduler (the reserved `start` command)."""
-    import uvicorn
-    from trendly.scheduler import start_scheduler
-
-    scheduler = start_scheduler(commands)
-    try:
-        uvicorn.run(build_app(commands), host="127.0.0.1", port=8100)
-    finally:
-        scheduler.shutdown(wait=False)
-    return 0
-
-
-def _endpoint(cmd: AbstractBaseCommand):
-    """Wrap a command as a route handler: Input is the body, Params map to query params."""
-    def handler(data, params):
-        return cmd(data, params)
-
-    handler.__name__ = cmd.name
-    handler.__doc__ = cmd.__doc__
-    handler.__signature__ = inspect.Signature([
-        inspect.Parameter("data", inspect.Parameter.POSITIONAL_OR_KEYWORD, annotation=cmd.Input),
-        inspect.Parameter("params", inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                          annotation=cmd.Params, default=Depends()),
-        ])
-    return handler
-
-
-def _summary(cmd: AbstractBaseCommand) -> str:
-    """First docstring line shown in the Swagger UI."""
-    return (cmd.__doc__ or "").strip().splitlines()[0] if cmd.__doc__ else ""

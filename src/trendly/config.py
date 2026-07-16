@@ -15,9 +15,14 @@ DEFAULT_SERVICES = {
 }
 
 
-def command_config(name: str, config: dict = None) -> dict:
-    """Return the per-command config section used to build a command's Config model."""
-    return (config or load_config()).get("commands", {}).get(name, {})
+def core_config(name: str, config: dict = None) -> dict:
+    """Return one pipeline step's config section used to build its Config model."""
+    return (config or load_config()).get("core", {}).get(name, {})
+
+
+def dashboard_dir(config: dict = None) -> Path:
+    """Return the built mdsite dashboard directory served as static files."""
+    return Path((config or load_config()).get("dashboard_dir", "dashboard/dist"))
 
 
 def data_dir(config: dict = None) -> Path:
