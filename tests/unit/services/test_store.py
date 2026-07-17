@@ -65,3 +65,27 @@ def test_log_run_appends(con):
     """Each run adds one history row."""
     store.log_run(con, "t", found=5, kept=2)
     assert tuple(con.execute("SELECT topic, found, kept FROM runs").fetchone()) == ("t", 5, 2)
+
+
+def search_result(**kwargs):
+    from trendly.models.article import SearchResult
+    defaults = dict(url="http://a", query="q", category="news", title="T",
+                    engine="bing", keywords=["ai"], score=0.5)
+    return SearchResult(**{**defaults, **kwargs})
+
+
+def test_record_search_upserts_per_group(con):
+    """Same url is distinct per query+category but upserts within a group."""
+    store.record_search(con, search_result(), "t")
+    store.record_search(con, search_result(score=0.9), "t")
+    store.record_search(con, search_result(category="sports"), "t")
+
+    rows = store.list_searches(con, "t")
+    assert len(rows) == 2
+    assert {r["category"]: r["score"] for r in rows} == {"news": 0.9, "sports": 0.5}
+
+
+def test_list_searches_decodes_keywords(con):
+    """Keyword lists round-trip through the json column."""
+    store.record_search(con, search_result(keywords=["npu", "chip"]), "t")
+    assert store.list_searches(con, "t")[0]["keywords"] == ["npu", "chip"]

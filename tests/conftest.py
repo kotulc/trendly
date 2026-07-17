@@ -32,6 +32,6 @@ def sample_topic(sample_config, tmp_path):
     topics.mkdir(parents=True)
     (topics / "ai-hardware.md").write_text(
         "---\nname: ai-hardware\nschedule: '0 */6 * * *'\n"
-        "queries: [latest ai accelerator news]\nmin_score: 0.5\n---\n"
+        "queries: [latest ai accelerator news]\ncategories: [news]\nmin_score: 0.5\n---\n"
         "News about AI accelerators, GPUs, and inference hardware.\n", encoding="utf-8")
     return "ai-hardware"

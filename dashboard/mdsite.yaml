@@ -1,11 +1,15 @@
 # Trendly dashboard site — built with mdsite (https://github.com/kotulc/mdsite).
 # Build: node ../mdsite/scripts/cli.js build --config dashboard/mdsite.yaml
-title: Trendly
+title: trendly
 repo_url: https://github.com/kotulc/trendly
 theme_toggle: navbar
-toc: false
+toc: true           # right column hosts the search page's keyword filter panel
 meta_sidebar: false
+reading_time: false
 
 content: ./content
 components: ./components
 output: ./dist
+
+nav_order:
+  "": [index, search]

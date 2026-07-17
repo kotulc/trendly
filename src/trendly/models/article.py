@@ -21,3 +21,12 @@ class Article(BaseModel):
     def domain(self) -> str:
         """Source domain, the unit that can be followed or unfollowed."""
         return urlparse(self.url).netloc
+
+
+class SearchResult(Article):
+    """Article plus search provenance: which query/category found it and via which engine."""
+
+    query: str = ""
+    category: str = ""
+    engine: str = ""
+    keywords: list[str] = []

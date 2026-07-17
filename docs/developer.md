@@ -34,8 +34,14 @@ request/response schemas. A typical session:
    Leave `queries` empty to have the llm seed them on the first run.
 
 2. `GET /api/check` — confirm searxng/taggly/llm are all reachable.
-3. `POST /api/search` — `{"topic": "robotics"}` or ad-hoc
-   `{"queries": ["..."], "top_n": 5}`; inspects raw search results, no llm/taggly involved.
+3. `POST /api/search` — `{"topic": "robotics"}` runs every profile query across the
+   configured categories (`core.search.categories`, overridable per topic profile), scores
+   each result against the topic via taggly, extracts keywords, and stores everything in the
+   `searches` table. Narrow it for quick tests:
+   `{"topic": "robotics", "queries": ["humanoid robots"], "categories": ["technology"], "top_n": 5}`.
+   Ad-hoc `{"queries": ["..."]}` without a topic searches without scoring or persistence.
+   Stored results: `GET /api/topics/robotics/searches` (grouped by query + category) or the
+   dashboard's Search page.
 4. `POST /api/extract` — `{"urls": ["<url from step 3>"]}`; check markdown quality.
 5. `POST /api/run` — `{"topic": "robotics", "dry_run": true}`; full pipeline without
    writing digests, returns found/new/extracted/kept counts.

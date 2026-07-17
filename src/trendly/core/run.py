@@ -21,6 +21,7 @@ router = APIRouter(tags=["pipeline"])
 class RunConfig(BaseModel):
     query_model: str = ""  # seeds queries for profiles without any; empty uses the llm default
     query_count: int = 5
+    max_extract: int = 25  # highest-scoring new results extracted per run
 
 
 class RunInput(BaseModel):
@@ -47,13 +48,15 @@ def run(data: RunInput) -> RunOutput:
         topic.queries = llm.gen_queries(topic, conf.query_model, conf.query_count)
         save_topic(topic)
 
-    found = search(SearchInput(queries=topic.queries)).results
+    found = search(SearchInput(topic=topic.name)).results
     con = store.connect()
     unfollowed = {d for d, f in store.source_follows(con, topic.name).items() if f == 0}
-    candidates = [a for a in found if a.domain() not in unfollowed]
-    new = set(store.filter_new(con, [a.url for a in candidates]))
+    candidates = {a.url: a for a in found if a.domain() not in unfollowed}  # dedup across groups
+    new = set(store.filter_new(con, list(candidates)))
 
-    extracted = extract(ExtractInput(results=[a for a in candidates if a.url in new]))
+    ranked = sorted((a for a in candidates.values() if a.url in new),
+                    key=lambda a: a.score, reverse=True)[:conf.max_extract]
+    extracted = extract(ExtractInput(results=ranked))
     for url in extracted.failed:
         store.record_item(con, Article(url=url), topic.name, "failed")
 

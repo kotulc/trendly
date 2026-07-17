@@ -14,7 +14,7 @@ input/output contracts and a single API endpoint — the module docstring and Sw
 
 | Endpoint | Purpose | Requires |
 |---|---|---|
-| `POST /api/search` | Meta-search a topic's queries via SearXNG | searxng |
+| `POST /api/search` | Meta-search each query across configurable categories; results are scored, keyworded, and stored per topic | searxng, taggly |
 | `POST /api/extract` | Fetch urls to markdown (trafilatura, crawl4ai fallback) | — |
 | `POST /api/enrich` | Tags/entities + topic and deleted-item similarity scores | taggly |
 | `POST /api/judge` | Filter low-score / deleted-similar items, llm summaries | llm |

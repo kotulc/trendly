@@ -47,6 +47,22 @@ def test_delete_unknown_item_404s(client, sample_topic):
     assert client.post("/api/items/999/delete").status_code == 404
 
 
+def test_topic_searches_rows(client, sample_topic):
+    """Stored search results come back flat with query/category/keywords per row."""
+    from trendly.config import data_dir
+    from trendly.models.article import SearchResult
+
+    con = store.connect(data_dir() / "trendly.db")
+    for category, url in [("news", "http://a"), ("news", "http://b"), ("sports", "http://c")]:
+        store.record_search(con, SearchResult(url=url, query="q", category=category,
+                                              keywords=["k"], score=0.7), sample_topic)
+
+    data = client.get(f"/api/topics/{sample_topic}/searches").json()
+    assert len(data["results"]) == 3
+    assert {r["category"] for r in data["results"]} == {"news", "sports"}
+    assert data["results"][0]["query"] == "q" and data["results"][0]["keywords"] == ["k"]
+
+
 def test_dashboard_static_mount(sample_config, tmp_path, monkeypatch):
     """A built dashboard export is served at / when dashboard_dir exists."""
     from fastapi.testclient import TestClient

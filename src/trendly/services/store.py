@@ -22,6 +22,13 @@ CREATE TABLE IF NOT EXISTS sources (
     domain TEXT, topic TEXT, hits INTEGER DEFAULT 0, kept INTEGER DEFAULT 0,
     followed INTEGER DEFAULT 1,
     PRIMARY KEY (domain, topic));
+CREATE TABLE IF NOT EXISTS searches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic TEXT NOT NULL, query TEXT NOT NULL, category TEXT DEFAULT '',
+    url TEXT NOT NULL, title TEXT DEFAULT '', snippet TEXT DEFAULT '',
+    engine TEXT DEFAULT '', keywords TEXT DEFAULT '[]', score REAL DEFAULT 0,
+    retrieved_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (topic, query, category, url));
 """
 
 
@@ -65,6 +72,13 @@ def list_items(con: sqlite3.Connection, topic: str, status: str = "") -> list[di
     return [{**dict(row), "tags": json.loads(row["tags"])} for row in rows]
 
 
+def list_searches(con: sqlite3.Connection, topic: str, limit: int = 500) -> list[dict]:
+    """Stored search results for a topic, newest-first, keywords decoded."""
+    rows = con.execute("SELECT * FROM searches WHERE topic = ? "
+                       "ORDER BY retrieved_at DESC, id DESC LIMIT ?", (topic, limit))
+    return [{**dict(row), "keywords": json.loads(row["keywords"])} for row in rows]
+
+
 def log_run(con: sqlite3.Connection, topic: str, found: int, kept: int) -> None:
     """Append one pipeline run summary to the run history."""
     con.execute("INSERT INTO runs (topic, found, kept) VALUES (?, ?, ?)", (topic, found, kept))
@@ -82,6 +96,19 @@ def record_item(con: sqlite3.Connection, article: Article, topic: str, status: s
                 "ELSE excluded.status END",
                 (article.url, topic, article.domain(), article.title, article.summary,
                  json.dumps(article.tags), article.score, status, digest_path))
+    con.commit()
+
+
+def record_search(con: sqlite3.Connection, result, topic: str) -> None:
+    """Upsert one search result row; re-retrieval refreshes score/keywords/timestamp."""
+    con.execute("INSERT INTO searches (topic, query, category, url, title, snippet, engine, "
+                "keywords, score) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (topic, query, category, url) DO UPDATE SET "
+                "title = excluded.title, snippet = excluded.snippet, engine = excluded.engine, "
+                "keywords = excluded.keywords, score = excluded.score, "
+                "retrieved_at = CURRENT_TIMESTAMP",
+                (topic, result.query, result.category, result.url, result.title,
+                 result.snippet, result.engine, json.dumps(result.keywords), result.score))
     con.commit()
 
 

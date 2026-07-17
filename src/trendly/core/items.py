@@ -43,6 +43,23 @@ class ActionOutput(BaseModel):
     ok: bool
 
 
+class SearchRow(BaseModel):
+    query: str
+    category: str
+    url: str
+    title: str
+    snippet: str
+    engine: str
+    keywords: list[str]
+    score: float
+    retrieved_at: str
+
+
+class SearchesOutput(BaseModel):
+    topic: str
+    results: list[SearchRow]
+
+
 @router.get("/topics")
 def topics() -> list[str]:
     """All topic profile names."""
@@ -57,6 +74,14 @@ def topic_items(topic: str, status: str = "") -> ItemsOutput:
     items = [Item(**row, followed=follows.get(row["domain"], 1) == 1)
              for row in store.list_items(con, topic, status)]
     return ItemsOutput(topic=topic, items=items)
+
+
+@router.get("/topics/{topic}/searches")
+def topic_searches(topic: str) -> SearchesOutput:
+    """Stored search results for a topic, newest-first, with query/category per row
+    so clients can group and filter freely."""
+    rows = store.list_searches(store.connect(), topic)
+    return SearchesOutput(topic=topic, results=[SearchRow(**row) for row in rows])
 
 
 @router.post("/sources/follow")

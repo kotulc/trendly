@@ -21,7 +21,7 @@ def fake_services(monkeypatch):
     def fake_post(url, json, timeout):
         n = len(json.get("candidates", []))
         payloads = {"tags": {"tags": {"ranked": ["ai"]}}, "ents": {"entities": []},
-                    "score": {"scores": [0.9] * n}}
+                    "score": {"scores": [0.9] * n}, "keys": {"keywords": ["gpu"]}}
         return httpx.Response(200, json=payloads[url.rsplit("/", 1)[-1]],
                               request=httpx.Request("POST", url))
 

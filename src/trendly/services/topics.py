@@ -13,6 +13,7 @@ class Topic(BaseModel):
     body: str = ""
     schedule: str = ""
     queries: list[str] = []
+    categories: list[str] = []  # per-topic search category overrides; empty uses config default
     sources: list[str] = []
     min_score: float = 0.5
 

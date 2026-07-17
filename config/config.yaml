@@ -18,9 +18,12 @@ core:
   check:
     timeout: 3.0
   search:
-    categories: news
+    # Appended to each query to diversify and group results (override per topic profile)
+    categories: [headlines, recent, events, policy, economy, technology]
+    searx_categories: news  # searxng engine category parameter
     time_range: week
-    top_n: 20
+    top_n: 20               # results kept per query+category group
+    keywords: true          # extract per-result keywords via taggly
   extract:
     min_length: 400   # chars of markdown below which the crawl4ai fallback kicks in
   enrich:
@@ -33,4 +36,5 @@ core:
     title: Trendly
     link: http://localhost:8100
     max_items: 50
-  run: {}
+  run:
+    max_extract: 25  # highest-scoring new results extracted per run
