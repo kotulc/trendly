@@ -1,44 +1,49 @@
 # Trendly
 
-Trendly is a browser-based workspace for writing about articles, podcasts, and videos and publishing to a site you own. Bring a Markdown draft from any chat service or write one in Trendly. Review it alongside the original source, then publish to GitHub Pages. Your published posts remain editable Markdown in your GitHub repository.
+Trendly is a browser-first workspace for writing about articles, podcasts, and videos and publishing to a site you own. Feeds appear as channels, posts appear as cards, and the editor renders an early Markdown draft as you write. Your drafts, feed definitions, suggestions, and media are ordinary files in a folder you control. An external agent can work with those same files.
 
-## From source to published post
+## Try the first version
 
-1. **Start a draft.** Paste Markdown, drop a `.md` file, or start writing. An optional **Copy writing prompt** action gives you a prompt for the chat service you already use. It asks what stood out, what evidence supports your takeaway, and what questions remain before formatting your draft. Trendly can accept the resulting Markdown without connecting to the chat service.
-2. **Review in one place.** The editor displays the draft, its rendered preview, and a card for each source. Edit the title, tags, or source details directly in the interface. If the frontmatter needs attention, Trendly preserves the draft and points to the fields that need fixing. The editor and preview sit side by side on desktop and switch by tab on smaller screens.
-3. **Connect GitHub when ready.** Signing in is part of first publish. Trendly guides you through creating a personal publishing repository or connecting an existing Trendly repository, authorizing access to that repository, and enabling GitHub Pages. Setup happens in the browser. GitHub may open a consent or repository selection screen. You return to the same draft when setup finishes.
-4. **Publish.** After setup, one action commits the reviewed post and starts deployment. The UI shows whether the post is deploying, live, or needs attention, with a link to the site when it is live. Opening a published post to edit it brings you back to the same editor and keeps its public URL stable.
+See the [user guide](USER_GUIDE.md) for a walkthrough of the app.
 
-## Workspace
+Use Node.js 22.12 or later and desktop Chrome or Edge.
 
-- **Posts** lists drafts and published posts, with their source, last edited date, and publishing status. Drafts are stored in the current browser and can be exported as Markdown. Published posts can be reopened from the connected repository.
-- **Sources** collects the articles, episodes, and videos referenced in your posts. Repeat references to the same source link back to one entry, so you can see everything you have written about it.
-- **Feeds** lets you follow a publication or podcast from a recognized feed URL in an imported post, or add a feed URL yourself. Trendly suggests the subscription for review. You can see recent entries, refresh, or unfollow. An entry can open a new draft with the source already attached.
+```sh
+npm ci
+npm run dev
+```
 
-You can try the workspace before connecting GitHub.
+On Windows PowerShell, use `npm.cmd` if the PowerShell npm shim is blocked. Follow Vite's localhost URL. `npm run build` type-checks the app and produces the static bundle in `dist/`.
 
-## Source cards and media
+The app opens in an interactive example workspace. Changes there last until reload. To work on disk, select **Open workspace** and choose an empty folder or a folder containing `workspace.yaml`. You can copy [example-workspace](example-workspace) to a writable location to start with posts and feeds.
 
-The same source data drives cards in the draft preview and on the published site. Every card links to the original and can show the title, publisher or show, thumbnail, and date when available. A source URL is enough to produce a card, so metadata lookup never blocks review or publishing.
+- **Read and write.** Choose a channel and a post, then use **Split** to edit and preview together. **Save draft** writes the Markdown file. YouTube URLs get click-to-play cards. Podcasts with an `audio_url` get an audio player. Other sources link back to the original and can display supplied metadata. Markdown can reference local images under `assets/`. Playback and remote images contact their original hosts.
+- **Collaborate with an agent.** Give the agent the workspace folder and [file format](#workspace-file-format). Ask it to create a post or suggest a feed. Changes appear on refresh, when the window regains focus, or during the three-second polling interval while the tab is visible.
+- **Review external edits.** Trendly reloads a changed draft when the editor is clean. If you have unsaved edits, it offers to load the disk version or save your edits as a separate draft. Save checks the file again for changes. Avoid editing the same file at the same instant in both tools until cross-process coordination is in place.
+- **Review suggested feeds.** In **Feed suggestions**, follow to save a local feed definition or dismiss the recommendation. Feed channels show posts assigned to them through frontmatter.
 
-| Source | Card behavior |
-| --- | --- |
-| Article | Show headline, publisher, and an optional image and description. Open the original article from the card. |
-| YouTube | Show a preview with a click-to-play player. Keep a direct video link available. |
-| Podcast | Show episode and show details. Offer audio playback when the episode's verified RSS feed supplies an audio enclosure, and link to the episode page. |
-| Other link | Show the supplied title or the link's hostname and a link to the original. |
+The first version runs locally with a static frontend and uses file-backed storage. Git publishing, deployment status, and live RSS ingestion are planned in the [implementation plan](IMPLEMENTATION_PLAN.md).
 
-The renderer builds supported players from recognized source URLs or verified feed entries. Imported Markdown supports text, images, and links through a safe renderer. Any supplied HTML or iframe code is treated as untrusted input.
+## Workspace file format
 
-## Markdown format
+```text
+workspace.yaml
+posts/<post-id>.md
+feeds/<feed-id>.yaml
+suggestions/<suggestion-id>.yaml
+assets/<filename>
+```
 
-The first format uses standard Markdown with versioned YAML frontmatter. The editor can fill in or correct these fields, so people can work in the UI or use the format directly.
+`workspace.yaml` contains `version: 1`, a `name`, and an optional `theme` of `light` or `dark`. See the [example workspace](example-workspace) for complete files. IDs use lowercase letters, digits, and hyphens, match their filename stem, and stay the same when a title changes. Use UTF-8 and a UUID if you need to generate a new ID. An agent should check for a current revision before editing, write via an atomic replacement where possible, and restrict its work to the selected workspace.
 
 ```markdown
 ---
 version: 1
+id: local-news
 title: What makes a local news story worth following?
+feeds: [civic-life]
 tags: [local-news, journalism]
+updated_at: 2026-11-18
 sources:
   - url: https://example.org/podcasts/local-news/episode-12
     kind: podcast
@@ -51,14 +56,10 @@ The episode made me wonder how often city hall coverage follows an issue
 past the first public hearing.
 ```
 
-`title` and each source's `url` are required. `kind`, `publisher`, source title, `tags`, and `feed_url` are optional. Source URLs identify individual items. Feed URLs identify subscriptions. Trendly assigns a stable post ID and publication timestamps, and keeps the original publication date across edits.
+The post body is standard Markdown. `version` and `id` should be supplied by producers, and the reader accepts plain Markdown and uses its filename and first heading as fallbacks. `feeds` contains local feed IDs. `updated_at` is an optional ISO date or timestamp used for ordering. Each source needs an HTTP or HTTPS `url`. The remaining source fields are optional. The renderer recognizes YouTube links and supports `kind: article`, `kind: podcast`, descriptions, image links, and direct audio links. Separate individual source URLs from subscription URLs.
 
-## First release
+A feed YAML file has `id`, `name`, and optional `description` and `url`. A suggestion uses the same fields and requires a `url`. A dismissed suggestion has `status: dismissed`. Following creates a feed and hides the matching suggestion. An agent can use a feed URL from post frontmatter to propose a separate suggestion file.
 
-Build the responsive editor, source cards, a basic feed view, and the GitHub publishing flow. A hosted backend handles GitHub authorization, repository operations, and public metadata and feed fetches. The first-time setup should be tested with a fresh personal GitHub account. The publishing check is to import and preview a post, approve access to one repository, publish it, and then publish an edit at the same URL. It should also be possible to retry a failed deployment from the workspace.
+## Publishing direction
 
-The first release targets a personal GitHub account with a public publishing repository. Explain during setup that publishing makes the committed Markdown and rendered site public. [GitHub Pages setup](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site) · [GitHub Pages API permissions](https://docs.github.com/en/rest/pages/pages#create-a-github-pages-site)
-
-Evaluate [mndsite](https://github.com/kotulc/mndsite) as the static renderer with a proof of concept for matching source cards in preview and on the published site. Generate the author's outbound RSS feed from published post metadata in the deployment workflow.
-
-Automatic source discovery, shared search and cross-site links, native apps, MCP, and social syndication can follow once the authoring and publishing workflow is established.
+Trendly will publish reviewed snapshots to a separate Git checkout. A small optional local helper can use the machine's existing Git credentials and handle commits and pushes behind the UI. [mndsite](https://github.com/kotulc/mndsite) remains the static site builder. The workspace stays on disk, and a publish operation selects the reviewed post and its referenced assets explicitly. Published Markdown remains portable, with history in the user's Git repository.

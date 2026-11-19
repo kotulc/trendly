@@ -222,3 +222,6 @@ data/digests/
 data/trendly.db
 output/
 dashboard/dist/
+
+# Browser app
+node_modules/
