@@ -6,6 +6,7 @@ export type FeedSource = {
   description?: string
   image_url?: string
   audio_url?: string
+  placement?: string
 }
 
 export type FeedEntry = {
@@ -18,9 +19,17 @@ export type FeedEntry = {
   href?: string
   draft?: boolean
   origin?: string
+  site?: string
+  cover?: { url: string; alt: string }
+  facets?: { name: string; label: string; hue?: number; values: string[] }[]
   sources: FeedSource[]
 }
 
 type Resolve = (value: string, entry: FeedEntry) => string | undefined
 
-export default function Feed(props: { entries: FeedEntry[]; resolveImage?: Resolve; resolveLink?: Resolve }): React.JSX.Element
+export default function Feed(props: {
+  entries: FeedEntry[]
+  defaultSource?: string
+  resolveImage?: Resolve
+  resolveLink?: Resolve
+}): React.JSX.Element

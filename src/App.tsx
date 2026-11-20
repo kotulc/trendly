@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { BookOpen, CircleHelp, FileText, FolderOpen, Github, Layers3, Link2, List, Moon, RefreshCw, Rss, Search, Sun, X } from 'lucide-react'
+import { CircleHelp, FolderOpen, Github, Layers3, Link2, List, Moon, RefreshCw, Rss, Search, Sun, X } from 'lucide-react'
 import Feed, { type FeedEntry } from './feed/Feed'
 import { exampleRepository, importFolder, loadRepository, openFolder, remoteRepository, repoAsset, type Repository, type Snapshot } from './repository'
 import { fetchFeed } from './rss'
@@ -9,7 +9,7 @@ type Loaded = { repo: Repository; snapshot: Snapshot }
 type FeedResult = { url: string; name: string; entries: FeedEntry[]; error?: string }
 
 const navigation = [
-  { id: 'posts', title: 'Posts', icon: FileText },
+  { id: 'posts', title: 'Posts', icon: Layers3 },
   { id: 'preview', title: 'Site feed', icon: List },
   { id: 'feeds', title: 'External feeds', icon: Rss },
   { id: 'sources', title: 'Sources', icon: Link2 },
@@ -29,6 +29,7 @@ export function App() {
   const [page, setPage] = useState<Page>('posts')
   const [search, setSearch] = useState('')
   const [tag, setTag] = useState('')
+  const [status, setStatus] = useState('')
   const [onlyDrafts, setOnlyDrafts] = useState(false)
   const [showDrafts, setShowDrafts] = useState(true)
   const [remoteForm, setRemoteForm] = useState(false)
@@ -48,9 +49,11 @@ export function App() {
   useEffect(() => {
     const root = document.documentElement
     root.classList.toggle('dark', dark)
-    const [hue, saturation] = palettes[theme || ''] || [dark ? 204 : 212, 100]
+    const [hue, saturation] = palettes[theme || ''] || [0, 0]
     root.style.setProperty('--site-hs', `${hue}deg ${saturation}%`)
     root.dataset.typeset = data?.snapshot.typeset || 'sans'
+    const header = getComputedStyle(root).getPropertyValue('--site-chrome-bg').trim()
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', header)
   }, [dark, theme, data?.snapshot.typeset])
 
   async function load(get: () => Promise<Repository> | Repository, replace = true, quiet = false) {
@@ -75,6 +78,7 @@ export function App() {
       if (replace) {
         setSearch('')
         setTag('')
+        setStatus('')
         setOnlyDrafts(false)
       }
     } catch (failure) {
@@ -124,6 +128,7 @@ export function App() {
     setPage(next)
     setSearch('')
     setTag('')
+    setStatus('')
   }
 
   function chooseFolder() {
@@ -148,12 +153,17 @@ export function App() {
   const snapshot = data?.snapshot
   const query = search.trim().toLowerCase()
   const availableTags = [...new Set(snapshot?.posts.flatMap(post => post.tags))].sort()
+  const statuses = (entry: FeedEntry) => entry.facets?.find(facet => facet.name === 'status')?.values || []
+  const availableStatuses = [...new Set(snapshot?.posts.flatMap(statuses))].sort()
   const matches = (entry: FeedEntry) => !query ||
-    [entry.title, entry.summary, entry.body, ...entry.sources.map(source => source.title || source.url)]
+    [entry.title, entry.summary, entry.body, entry.site || '', ...statuses(entry),
+      ...(entry.facets || []).flatMap(facet => facet.values), ...entry.sources.map(source => source.title || source.url)]
       .some(value => value.toLowerCase().includes(query))
-  const filtered = snapshot?.posts.filter(post => matches(post) && (!tag || post.tags.includes(tag)) && (!onlyDrafts || post.draft)) || []
+  const filtered = snapshot?.posts.filter(post => matches(post) && (!tag || post.tags.includes(tag)) &&
+    (!status || statuses(post).includes(status)) && (!onlyDrafts || post.draft)) || []
   const sitePosts = snapshot?.posts.filter(post => post.draft ? showDrafts
     : !!post.date && !!post.route && (!snapshot.section || post.route.startsWith(snapshot.section + '/'))) || []
+  const listedPosts = page === 'posts' ? filtered : page === 'preview' ? sitePosts : undefined
   const sources = new Map<string, { title: string; publisher: string; posts: Set<string> }>()
   for (const post of snapshot?.posts || []) for (const source of post.sources) {
     const existing = sources.get(source.url)
@@ -180,9 +190,8 @@ export function App() {
     <div className="app">
       <header className="navbar">
         <button className="brand" onClick={() => navigate('posts')}>
-          <span className="brand-mark"><Layers3 size={18} aria-hidden="true" /></span> Trendly
+          <span className="brand-mark" aria-hidden="true" /> Trendly
         </button>
-        <div className="repo-breadcrumb" title={data?.repo.label}>{data?.repo.label || 'Repository'}</div>
         <div className="navbar-actions">
           <button className="button" onClick={chooseFolder} disabled={busy}><FolderOpen size={16} /> <span>Open folder</span></button>
           <input type="file" ref={fileInput} hidden {...{ webkitdirectory: '' }} onChange={event => {
@@ -202,13 +211,12 @@ export function App() {
         <aside className="sidebar">
           <div className="sidebar-repo">
             <strong>{snapshot?.title || 'Repository'}</strong>
-            <span>{data?.repo.revision ? data.repo.revision.slice(0, 8) : data?.repo.label === 'Example repository' ? 'Example repository' : 'Working files'}</span>
+            <span>{data?.repo.label}{data?.repo.revision && ` · ${data.repo.revision.slice(0, 8)}`}</span>
           </div>
           <nav aria-label="Repository views">
             {navigation.map(({ id, title, icon: Icon }) => <button key={id} aria-current={page === id ? 'page' : undefined}
               onClick={() => navigate(id)}><Icon size={17} aria-hidden="true" /> {title}</button>)}
           </nav>
-          <div className="sidebar-foot"><BookOpen size={16} /> <span>Repository explorer</span></div>
         </aside>
 
         <main>
@@ -231,6 +239,9 @@ export function App() {
               {availableTags.length > 0 && <select aria-label="Filter by tag" value={tag} onChange={event => setTag(event.target.value)}>
                 <option value="">All tags</option>{availableTags.map(value => <option key={value}>{value}</option>)}
               </select>}
+              {availableStatuses.length > 0 && <select aria-label="Filter by status" value={status} onChange={event => setStatus(event.target.value)}>
+                <option value="">All statuses</option>{availableStatuses.map(value => <option key={value}>{value}</option>)}
+              </select>}
               {snapshot?.posts.some(post => post.draft) && <label className="filter"><input type="checkbox" checked={onlyDrafts} onChange={event => setOnlyDrafts(event.target.checked)} /> Drafts only</label>}
             </>}
             {page === 'preview' && <>
@@ -245,15 +256,20 @@ export function App() {
               onChange={event => setIncludePosts(event.target.checked)} /> Include repository posts</label>}
             {page === 'feeds' ? (
               <button className="button reload" disabled={loadingFeeds || !snapshot?.subscriptions.length} onClick={() => void refreshFeeds()}><RefreshCw size={15} /> Refresh feeds</button>
-            ) : data?.repo.label !== 'Example repository' && <button className="button reload" disabled={busy} onClick={() => void reload()}><RefreshCw size={15} /> Refresh</button>}
+            ) : data && (listedPosts || data.repo.label !== 'Example repository') && (
+              <div className="controls-end">
+                {data.repo.label !== 'Example repository' &&
+                  <button className="button" disabled={busy} onClick={() => void reload()}><RefreshCw size={15} /> Refresh</button>}
+                {listedPosts && <span className="count">{listedPosts.length} {listedPosts.length === 1 ? 'post' : 'posts'}</span>}
+              </div>
+            )}
           </div>
 
           {busy && <p className="activity" role="status">Loading repository…</p>}
-          {data && (page === 'posts' || page === 'preview') && <>
-            <p className="count">{(page === 'posts' ? filtered : sitePosts).length} posts</p>
-            <Feed entries={page === 'posts' ? filtered : sitePosts} key={`${page}-${data.repo.label}`}
+          {data && listedPosts && (
+            <Feed entries={listedPosts} key={`${page}-${data.repo.label}`} defaultSource={data.snapshot.title}
               resolveImage={(value, entry) => repoAsset(data.repo, value, entry)} />
-          </>}
+          )}
           {page === 'sources' && <div className="source-list">
             {[...sources].filter(([url, source]) => `${url} ${source.title} ${[...source.posts].join(' ')}`.toLowerCase().includes(query))
               .map(([url, source]) => <article key={url}><span>{source.publisher}</span>
@@ -267,7 +283,8 @@ export function App() {
             {snapshot?.subscriptions.length === 0 && <p className="activity">No subscriptions defined in feeds.yaml.</p>}
             {feedResults?.filter(feed => feed.error && (!activeFeed || feed.url === activeFeed)).map(feed =>
               <p className="notice" key={feed.url}>{feed.name} could not be loaded. {feed.error}</p>)}
-            <Feed entries={activity} resolveImage={(value, entry) => data && entry.path ? repoAsset(data.repo, value, entry) : undefined} />
+            <Feed entries={activity} defaultSource={snapshot?.title}
+              resolveImage={(value, entry) => data && entry.path ? repoAsset(data.repo, value, entry) : undefined} />
           </>}
         </main>
       </div>

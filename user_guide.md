@@ -11,7 +11,7 @@ Run `npm ci` and `npm run dev` from the Trendly project folder and open the addr
 
 ## Browse and preview
 
-- **Posts** shows the repository's Markdown. Search the text, filter by tag, or choose **Drafts only**. Select a summary to expand the post.
+- **Posts** shows the repository's Markdown. Search the text, filter by tag or status, or choose **Drafts only**. Select a post to open it at full column width and close the previously selected post. Summaries, format, and tags appear in the expanded header.
 - **Site feed** previews the mndsite feed. The same cards show titles, summaries, full posts, and source media. Use **Include drafts** to switch between the local working preview and the published selection.
 - **External feeds** reads RSS and Atom listed in `feeds.yaml`. Select a subscription or choose **Include repository posts** to view both together.
 - **Sources** lists the links referenced in posts and shows which posts discuss each one.

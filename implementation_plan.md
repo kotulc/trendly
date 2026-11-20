@@ -16,7 +16,7 @@ The initial explorer, standalone mndsite feed and RSS export, and Trendly previe
 
 ## 2. Add a reusable expandable feed to mndsite
 
-- Start from mndsite's existing listing cards, excerpt logic, and Markdown rendering. Add an opt-in feed view that can be used by any mndsite content repository. Collapsed rows show title, date, and summary. Expanding a row reveals the full post and its source cards, with a permanent post link for published entries.
+- Start from mndsite's existing listing cards, excerpt logic, and Markdown rendering. Add an opt-in feed view that can be used by any mndsite content repository. Collapsed rows show a media-type icon, title, source, and date. Open one row at a time to see its summary and metadata above the full post and source cards, with a permanent post link for published entries.
 - Use the configured frontmatter description as the summary when available and fall back to the generated excerpt. Keep sorting, asset resolution, and keyboard interaction consistent. Exercise site base paths and the existing article URLs.
 - Separate feed rendering from repository loading and Next.js routing. Define a portable entry shape and a presentation component with styles that work in both mndsite and Trendly. Pass through resolved links and media. Keep Next.js routing and build-time data in mndsite's adapter, and keep repo selection and draft awareness in Trendly's adapter.
 - Extend mndsite's existing standalone build and watch workflows as needed. Generate feed data from the site content tree, which already supplies the regular article pages. Keep the feature generic and usable without installing Trendly. Reuse mndsite's existing publishing workflow and pinned builder version in consumer repositories.

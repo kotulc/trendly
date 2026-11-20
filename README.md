@@ -5,7 +5,7 @@ Trendly is a browser-first, read-only explorer for Git-managed Markdown, media, 
 ## Explore a repository
 
 - **Browse a repository.** Use a simple Pages CMS–style sidebar and list for posts, sources, and subscribed feeds. Local and remote inputs produce the same in-memory view.
-- **Preview the published feed.** A compact list shows each post's title, date, and summary. Select a post to expand its full Markdown and rich-media cards inline. Trendly's local preview can also show clearly marked drafts and reload after an editor or agent changes the files.
+- **Preview the published feed.** A compact list shows each post's media type, title, source, and date. Open one post at a time to see its summary, metadata, full Markdown, and rich media across the column. Trendly's local preview can also show clearly marked drafts and reload after an editor or agent changes the files.
 - **Read external feeds.** Load RSS and Atom from repository-defined subscriptions. Show each feed's status and merge the available entries into the browsing experience. Direct browser fetch is the default, with an optional proxy for feeds that block browser reads.
 
 ## Repository and publishing
@@ -26,4 +26,10 @@ The static build is available with `npm run build`. Chrome and Edge can reread a
 
 In `feeds.yaml`, list subscription names and URLs under `feeds`. If some sources block browser reads, set an optional `proxy_url` pointing to a trusted service that accepts the feed URL as a `url` query parameter. Trendly tries the original feed first.
 
-The portable feed view and stylesheet come from mndsite and are vendored in `src/feed/` so either project can build independently. Keep those two files in sync when changing their markup or styling.
+## Post cards
+
+Use `description` for the card excerpt and `site` for a publication label. The first source determines the media icon from its type or URL. Status, categories, and tags appear as chips. Add other fields under `frontmatter.facets` in `mndsite.yaml`. Trendly also uses the configured tags and status for the Posts filters.
+
+Inside the Markdown body, give a YouTube or direct audio link the title `"embed"` to show a click-to-load player. The original link remains available. Set `placement: inline` on the corresponding source entry to show the player only in the body.
+
+The portable feed component, metadata helper, and stylesheet come from mndsite and are vendored in `src/feed/` so either project can build independently. Keep those files in sync when changing the shared cards.

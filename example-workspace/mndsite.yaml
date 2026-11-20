@@ -1,8 +1,14 @@
 title: Field Notes
-description: Notes on the tools, ideas, and questions worth keeping.
+description: Field notes on design, technology, and building things that last.
 content: ./content
 feed_url: posts
 expandable_feed: true
+frontmatter:
+  facets:
+    format:
+      key: format
+      label: Format
+      color: teal
 theme:
   color: default
   typeset: sans

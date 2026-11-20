@@ -1,5 +1,6 @@
 import { parse } from 'yaml'
 import type { FeedEntry, FeedSource } from './feed/Feed'
+import { card_meta } from './feed/card-meta.mjs'
 
 export type Repository = {
   label: string
@@ -85,6 +86,7 @@ function post_source(value: unknown): FeedSource[] {
   return url ? [{
     url, title: text(data.title), kind: text(data.kind), publisher: text(data.publisher),
     description: text(data.description), image_url: website(data.image_url), audio_url: website(data.audio_url),
+    placement: text(data.placement),
   }] : []
 }
 
@@ -102,10 +104,12 @@ function post(data: string, path: string, root: string, draft: boolean, config: 
   const title = field(meta, mapping.title, ['title']) || name.replace(/[-_]/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())
   const base = website(object(config.rss).site_url)
   const canonical = base && new URL(route.split('/').map(encodeURIComponent).join('/') + (route ? '/' : ''), base.replace(/\/*$/, '/')).href
+  const card = card_meta(meta, object(mapping.facets), draft)
   return {
     id: path, title, draft, route, path, body, date: validDate ? date : undefined,
     summary: field(meta, mapping.description, ['description', 'desc']) || excerpt(body),
-    tags: Array.isArray(meta.tags) ? meta.tags.map(text).filter(Boolean) : [],
+    ...card,
+    tags: card.facets?.find(facet => facet.name === 'tags')?.values || [],
     sources: Array.isArray(meta.sources) ? meta.sources.flatMap(post_source) : [],
     href: draft ? undefined : canonical || repo.link?.(path),
   } satisfies Post
@@ -254,12 +258,15 @@ export async function remoteRepository(input: string, ref: string): Promise<Repo
 }
 
 export function exampleRepository(): Repository {
+  const assets = Object.fromEntries(Object.entries(import.meta.glob('../example-workspace/**/*.{jpg,jpeg,png,webp,svg}', {
+    eager: true, query: '?url', import: 'default',
+  })).map(([path, url]) => [path.replace('../example-workspace/', ''), url as string]))
   const files = Object.fromEntries(Object.entries(import.meta.glob('../example-workspace/**/*.{yaml,md}', { eager: true, query: '?raw', import: 'default' }))
     .map(([path, data]) => [path.replace('../example-workspace/', ''), data as string]))
   return {
     label: 'Example repository',
-    paths: () => Object.keys(files),
+    paths: () => [...Object.keys(files), ...Object.keys(assets)],
     async read(path) { return files[path] },
-    asset: () => undefined,
+    asset: path => assets[path],
   }
 }
