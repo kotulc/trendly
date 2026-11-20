@@ -1,10 +1,8 @@
 ---
-version: 1
-id: questions-worth-keeping
 title: Questions worth keeping
-feeds: [science]
+description: Looking back at a small experiment and the questions it leaves open.
 tags: [curiosity]
-updated_at: 2026-11-14
+date: 2026-11-14
 sources:
   - url: https://www.youtube.com/watch?v=jNQXAC9IVRw
     kind: youtube

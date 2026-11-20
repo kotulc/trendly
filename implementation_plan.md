@@ -2,6 +2,8 @@
 
 Build Trendly as a lightweight, read-only repository explorer with a Pages CMSâ€“style interface. Keep Markdown, media, and YAML authoritative in the repository. Use an in-memory model for posts, sources, and external feeds. Editing happens in an external editor or agent, and publishing stays in the repository's existing Git and mndsite workflow.
 
+The initial explorer, standalone mndsite feed and RSS export, and Trendly preview are implemented. The two apps build independently using matching copies of the portable feed view. The checks below describe the release criteria.
+
 ## 1. Replace the authoring shell with a repository explorer
 
 - Reuse the Pages CMS sidebar, header, list patterns, and styling where they can be adapted without its server runtime. Keep React, TypeScript, and Vite. Use a small shell with **Posts**, **Feeds**, and **Sources**. Bring forward Trendly's Markdown, YAML, and source-card code where useful.
@@ -18,8 +20,9 @@ Build Trendly as a lightweight, read-only repository explorer with a Pages CMSâ€
 - Use the configured frontmatter description as the summary when available and fall back to the generated excerpt. Keep sorting, asset resolution, and keyboard interaction consistent. Exercise site base paths and the existing article URLs.
 - Separate feed rendering from repository loading and Next.js routing. Define a portable entry shape and a presentation component with styles that work in both mndsite and Trendly. Pass through resolved links and media. Keep Next.js routing and build-time data in mndsite's adapter, and keep repo selection and draft awareness in Trendly's adapter.
 - Extend mndsite's existing standalone build and watch workflows as needed. Generate feed data from the site content tree, which already supplies the regular article pages. Keep the feature generic and usable without installing Trendly. Reuse mndsite's existing publishing workflow and pinned builder version in consumer repositories.
+- mndsite's initial RSS implementation uses `rss.site_url` to enable a static `rss.xml`, a subscribe link, and feed autodiscovery. It emits titles, summaries, publication dates, and permanent post URLs as item IDs. When the expandable HTML feed lands, use the same published post selection and summary fallback for both outputs.
 
-**Exit check.** Build a plain mndsite site with the optional feed and publish it independently. Expand posts with an image, video, or podcast source and verify their summaries, media, and permanent links.
+**Exit check.** Build a plain mndsite site with the optional feed and publish it independently. Expand posts with an image, video, or podcast source and verify their summaries, media, and permanent links. Subscribe to its RSS feed and confirm that editing a post keeps the same item ID.
 
 ## 3. Bring the same feed into Trendly's working preview
 

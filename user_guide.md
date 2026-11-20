@@ -1,45 +1,23 @@
 # Using Trendly
 
-This guide describes the current local authoring prototype. The planned repository explorer and expandable feed are described in the [implementation plan](implementation_plan.md).
+Trendly is a read-only browser for Markdown posts, sources, and RSS subscriptions. Your repository supplies the content and configuration. Use an external editor or agent to make changes.
 
-Trendly is a local workspace for writing about articles, videos, and podcasts. **Feeds** are channels that organize your posts. **Post cards** open your drafts. A live preview shows how a draft reads and displays cards linking to its sources.
+## Open a repository
 
-## Open a workspace
+Run `npm ci` and `npm run dev` from the Trendly project folder and open the address Vite prints. On Windows PowerShell, use `npm.cmd` in place of `npm` if necessary. The app opens an example repository so you can try it immediately.
 
-1. From the Trendly folder, run `npm ci` to install dependencies. On Windows PowerShell, use `npm.cmd ci` if needed.
-2. Run `npm run dev` or `npm.cmd run dev`. Open the address it prints in desktop Chrome or Edge.
-3. Explore the example workspace. Its edits reset when you reload the page.
-4. To keep your work, click **Open workspace** and choose an empty folder. You can also copy the [example workspace](example-workspace) to a new folder and open that copy. Grant access when your browser asks.
+- **Open folder** selects a checkout from your computer. Choose the folder containing `mndsite.yaml`. Chrome and Edge can reread the selected folder and check for changes while the tab is visible. In Firefox, choose the folder again after editing files to import a fresh snapshot.
+- **Open GitHub** accepts a public repository as `owner/repository` or its GitHub URL. You can enter a branch, tag, or commit. Trendly shows the commit it loaded. For a private repository, use a local checkout.
 
-Your saved work lives in the folder you chose. To resume in a fresh browser session, use **Open workspace** to select that same folder.
+## Browse and preview
 
-## Use Firefox
+- **Posts** shows the repository's Markdown. Search the text, filter by tag, or choose **Drafts only**. Select a summary to expand the post.
+- **Site feed** previews the mndsite feed. The same cards show titles, summaries, full posts, and source media. Use **Include drafts** to switch between the local working preview and the published selection.
+- **External feeds** reads RSS and Atom listed in `feeds.yaml`. Select a subscription or choose **Include repository posts** to view both together.
+- **Sources** lists the links referenced in posts and shows which posts discuss each one.
 
-Firefox uses Trendly's local launcher to access a folder. Create an empty folder or use an existing Trendly workspace, then run this from the Trendly project folder:
+## Update or publish a post
 
-```powershell
-npm.cmd run workspace -- "C:\path\to\your\workspace"
-```
+Edit Markdown files in the repository, then return to Trendly and refresh. Keep drafts and their assets under `drafts/`, outside the content and asset directories configured for publication. To publish, move the reviewed files into the published content tree and use your repository's normal Git and mndsite workflow.
 
-On macOS or Linux, use `npm run workspace -- "/path/to/workspace"`. Open the address the terminal prints in Firefox and click **Open workspace**. Trendly opens the folder you passed in. Keep the terminal running while you work. To switch folders, stop the launcher and run it again with the other folder's path.
-
-## Write and preview a post
-
-1. Select an existing post card or click **New draft**. If you start a draft from a feed, Trendly assigns the draft to that feed.
-2. Click **Split** to see your Markdown and its preview together, or switch between **Markdown** and **Preview**. The preview updates as you type.
-3. Write below the closing `---`. Use the fields at the top to set the title, tags, feeds, and sources. The example posts show how to add a source URL.
-4. Click **Save draft** to write the post to the workspace folder.
-
-Source cards always link to the original. YouTube cards offer click-to-play video. A podcast card can offer audio playback when it has a direct audio URL.
-
-## Work with an agent
-
-Give Herder or another agent the path to your workspace and share the [example files](example-workspace). Ask it to create or revise a post in `posts/` or suggest a feed in `suggestions/`. Use a stable ID matching the filename stem. Return to Trendly and click **Refresh workspace** if the changes haven’t already appeared.
-
-If a file changes while you have unsaved edits, **Load disk version** opens the external version and discards your unsaved edits. **Save edits as a copy** keeps both versions as separate drafts.
-
-## Review feed suggestions
-
-Open **Feed suggestions**. Click **Follow** to add a suggested feed to the sidebar or **Dismiss** to remove the suggestion from the list. To add a feed by hand, click **+** next to **Feeds** and enter a name and optional URL.
-
-This prototype uses feeds to organize local posts. The planned explorer will read live RSS where available, and publishing will use the repository's mndsite workflow.
+To enable the expandable feed on the published site, set `expandable_feed: true` and choose an existing section with `feed_url` in `mndsite.yaml`. Add `rss.site_url` with the full public base URL to generate `rss.xml`. [mndsite](https://github.com/kotulc/mndsite)

@@ -1,338 +1,274 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { AlertCircle, BookOpen, Check, ChevronRight, Columns2, FileText, FolderOpen, Hash, Lightbulb, List, Moon, Plus, RefreshCw, Save, Sun, TrendingUp } from 'lucide-react'
-import { stringify } from 'yaml'
-import { copyPost, newPost, readPost, readYaml, webUrl, type Post, type Snapshot, type Suggestion } from './model'
-import { Preview } from './Preview'
-import { demoWorkspace, openWorkspace, scanWorkspace, WorkspaceConflict, type Workspace } from './workspace'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { BookOpen, CircleHelp, FileText, FolderOpen, Github, Layers3, Link2, List, Moon, RefreshCw, Rss, Search, Sun, X } from 'lucide-react'
+import Feed, { type FeedEntry } from './feed/Feed'
+import { exampleRepository, importFolder, loadRepository, openFolder, remoteRepository, repoAsset, type Repository, type Snapshot } from './repository'
+import { fetchFeed } from './rss'
 
-type Editor = { file: string; raw: string; base: string | null }
-type View = 'preview' | 'markdown' | 'split'
+type Page = 'posts' | 'preview' | 'feeds' | 'sources'
+type Loaded = { repo: Repository; snapshot: Snapshot }
+type FeedResult = { url: string; name: string; entries: FeedEntry[]; error?: string }
 
-const empty: Snapshot = { name: '', posts: [], feeds: [], suggestions: [], issues: [] }
-const all = 'all'
-const recommendations = 'suggestions'
+const navigation = [
+  { id: 'posts', title: 'Posts', icon: FileText },
+  { id: 'preview', title: 'Site feed', icon: List },
+  { id: 'feeds', title: 'External feeds', icon: Rss },
+  { id: 'sources', title: 'Sources', icon: Link2 },
+] as const
+
+const palettes: Record<string, [number, number]> = {
+  slate: [215, 19], gray: [220, 9], blue: [221, 83], indigo: [243, 75], violet: [262, 83],
+  rose: [347, 77], orange: [21, 90], amber: [38, 92], emerald: [161, 94], teal: [175, 84], cyan: [192, 91],
+}
 
 function message(error: unknown) {
-  return error instanceof Error ? error.message : String(error)
-}
-
-function draftFrom(post: Post): Editor {
-  return { file: post.file, raw: post.raw, base: post.raw }
-}
-
-function displayDate(value?: string) {
-  if (!value) return 'Draft'
-  const valid = /^\d{4}-\d{2}-\d{2}/.exec(value)
-  const date = valid ? new Date(valid[0] + 'T12:00:00') : new Date(NaN)
-  return Number.isNaN(date.getTime()) ? 'Draft' : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date)
+  return error instanceof Error ? error.message : 'Unable to load this repository.'
 }
 
 export function App() {
-  const [workspace, setWorkspace] = useState(demoWorkspace)
-  const [snapshot, setSnapshot] = useState(empty)
-  const [channel, setChannel] = useState(all)
-  const [editor, setEditor] = useState<Editor | null>(null)
-  const [view, setView] = useState<View>('preview')
+  const [data, setData] = useState<Loaded>()
+  const [page, setPage] = useState<Page>('posts')
+  const [search, setSearch] = useState('')
+  const [tag, setTag] = useState('')
+  const [onlyDrafts, setOnlyDrafts] = useState(false)
+  const [showDrafts, setShowDrafts] = useState(true)
+  const [remoteForm, setRemoteForm] = useState(false)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
-  const [addingFeed, setAddingFeed] = useState(false)
-  const scanVersion = useRef(0)
-  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
-  const dark = snapshot.theme ? snapshot.theme === 'dark' : systemDark
-
-  const dirty = !!editor && editor.raw !== editor.base
-  const disk = snapshot.posts.find((post) => post.file === editor?.file)
-  const conflict = !!editor && (disk?.raw ?? null) !== editor.base
-  const draft = useMemo(() => editor ? readPost(editor.file, editor.raw) : null, [editor])
-  const currentFeed = channel.startsWith('feed:') ? snapshot.feeds.find((feed) => `feed:${feed.id}` === channel) : undefined
-  const available = snapshot.suggestions.filter((item) => !item.dismissed && !snapshot.feeds.some((feed) => feed.id === item.id || feed.url === item.url))
-  const visiblePosts = snapshot.posts.filter((post) => !currentFeed || post.feeds.includes(currentFeed.id))
+  const [dark, setDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const [feedResults, setFeedResults] = useState<FeedResult[]>()
+  const [activeFeed, setActiveFeed] = useState('')
+  const [includePosts, setIncludePosts] = useState(false)
+  const [loadingFeeds, setLoadingFeeds] = useState(false)
+  const fileInput = useRef<HTMLInputElement>(null)
+  const readVersion = useRef(0)
+  const feedVersion = useRef(0)
+  const foreground = useRef(false)
+  const theme = data?.snapshot.color
 
   useEffect(() => {
-    const preference = window.matchMedia('(prefers-color-scheme: dark)')
-    const update = (event: MediaQueryListEvent) => setSystemDark(event.matches)
-    preference.addEventListener('change', update)
-    return () => preference.removeEventListener('change', update)
-  }, [])
+    const root = document.documentElement
+    root.classList.toggle('dark', dark)
+    const [hue, saturation] = palettes[theme || ''] || [dark ? 204 : 212, 100]
+    root.style.setProperty('--site-hs', `${hue}deg ${saturation}%`)
+    root.dataset.typeset = data?.snapshot.typeset || 'sans'
+  }, [dark, theme, data?.snapshot.typeset])
 
-  useEffect(() => {
-    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-  }, [dark])
-
-  const refresh = useCallback(async (target: Workspace) => {
-    const version = ++scanVersion.current
-    const updated = await scanWorkspace(target)
-    if (version !== scanVersion.current) return
-    setSnapshot(updated)
-    setEditor((current) => {
-      if (!current) return target.mode === 'demo' && updated.posts.length ? draftFrom(updated.posts[0]) : null
-      if (current.raw !== current.base) return current
-      const latest = updated.posts.find((post) => post.file === current.file)
-      return latest ? draftFrom(latest) : null
-    })
-  }, [])
-
-  useEffect(() => {
-    const scan = () => {
-      void refresh(workspace).catch((failure) => setError(message(failure)))
+  async function load(get: () => Promise<Repository> | Repository, replace = true, quiet = false) {
+    if (quiet && foreground.current) return
+    const version = ++readVersion.current
+    if (!quiet) { foreground.current = true; setBusy(true); setError('') }
+    let repo: Repository | undefined
+    try {
+      repo = await get()
+      if (quiet && repo.stamp === data?.repo.stamp) { repo.dispose?.(); return }
+      const snapshot = await loadRepository(repo)
+      if (version !== readVersion.current) { repo.dispose?.(); return }
+      if (JSON.stringify(snapshot.subscriptions) !== JSON.stringify(data?.snapshot.subscriptions) ||
+        snapshot.proxy !== data?.snapshot.proxy || replace) {
+        ++feedVersion.current
+        setLoadingFeeds(false)
+        setFeedResults(undefined)
+        setActiveFeed('')
+      }
+      setData({ repo, snapshot })
+      setError('')
+      if (replace) {
+        setSearch('')
+        setTag('')
+        setOnlyDrafts(false)
+      }
+    } catch (failure) {
+      repo?.dispose?.()
+      if (version === readVersion.current && !(failure instanceof DOMException && failure.name === 'AbortError')) setError(message(failure))
+    } finally {
+      if (!quiet && version === readVersion.current) {
+        foreground.current = false
+        setBusy(false)
+      }
     }
-    scan()
-    if (workspace.mode === 'demo') return
-    const timer = window.setInterval(() => { if (!document.hidden) scan() }, 3000)
-    window.addEventListener('focus', scan)
-    return () => {
-      ++scanVersion.current
-      window.clearInterval(timer)
-      window.removeEventListener('focus', scan)
-    }
-  }, [workspace, refresh])
-
-  useEffect(() => {
-    if (!dirty) return
-    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = true }
-    window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
-  }, [dirty])
-
-  function maySwitch() {
-    return !dirty || window.confirm('Leave this draft and discard unsaved edits?')
   }
 
-  async function run(task: () => Promise<void>) {
-    setBusy(true)
-    setError('')
-    setNotice('')
-    try { await task() }
-    catch (failure) {
-      if (!(failure instanceof DOMException && failure.name === 'AbortError')) setError(message(failure))
-      if (failure instanceof WorkspaceConflict) await refresh(workspace).catch(() => {})
-    } finally { setBusy(false) }
+  useEffect(() => { void load(exampleRepository) }, [])
+
+  useEffect(() => {
+    const repo = data?.repo
+    if (!repo) return
+    if (repo.refresh && !repo.revision && !busy) {
+      const timer = window.setInterval(() => {
+        if (!document.hidden) void load(repo.refresh!, false, true)
+      }, 3500)
+      return () => window.clearInterval(timer)
+    }
+  }, [data, busy])
+
+  useEffect(() => () => data?.repo.dispose?.(), [data?.repo])
+
+  async function refreshFeeds(snapshot = data?.snapshot) {
+    if (!snapshot) return
+    const version = ++feedVersion.current
+    setLoadingFeeds(true)
+    try {
+      const results = await Promise.all(snapshot.subscriptions.map(async feed => {
+        try { return { ...feed, entries: await fetchFeed(feed, snapshot.proxy) } }
+        catch (failure) { return { ...feed, entries: [], error: message(failure) } }
+      }))
+      if (version === feedVersion.current) setFeedResults(results)
+    } finally { if (version === feedVersion.current) setLoadingFeeds(false) }
+  }
+
+  useEffect(() => {
+    if (page === 'feeds' && !feedResults && !loadingFeeds && data?.snapshot.subscriptions.length) void refreshFeeds()
+  }, [page, feedResults, loadingFeeds, data?.snapshot.subscriptions])
+
+  function navigate(next: Page) {
+    setPage(next)
+    setSearch('')
+    setTag('')
   }
 
   function chooseFolder() {
-    if (!maySwitch()) return
-    void run(async () => {
-      const selected = await openWorkspace()
-      const loaded = await scanWorkspace(selected)
-      ++scanVersion.current
-      setSnapshot(loaded)
-      setEditor(loaded.posts[0] ? draftFrom(loaded.posts[0]) : null)
-      setView('preview')
-      setChannel(all)
-      setWorkspace(selected)
-    })
+    const picker = (window as Window & { showDirectoryPicker?: Parameters<typeof openFolder>[0] }).showDirectoryPicker
+    if (picker) void load(() => openFolder(picker))
+    else fileInput.current?.click()
   }
 
-  function toggleTheme() {
-    void run(async () => {
-      const raw = await workspace.read('workspace.yaml')
-      if (raw === null) throw new Error('This folder is missing workspace.yaml.')
-      const settings = readYaml(raw)
-      await workspace.write('workspace.yaml', stringify({ ...settings, theme: dark ? 'light' : 'dark' }), raw)
-      await refresh(workspace)
-    })
-  }
-
-  function selectPost(post: Post) {
-    if (busy || editor?.file === post.file || !maySwitch()) return
-    setEditor(draftFrom(post))
-    setView('preview')
-    setNotice('')
-  }
-
-  function selectChannel(next: string) {
-    if (channel === next || busy || !maySwitch()) return
-    setEditor(next === recommendations ? null : snapshot.posts
-      .filter((post) => next === all || post.feeds.includes(next.slice(5))).map(draftFrom)[0] ?? null)
-    setView('preview')
-    setChannel(next)
-    setNotice('')
-  }
-
-  function createDraft() {
-    if (!maySwitch()) return
-    const id = crypto.randomUUID()
-    setEditor({ file: `${id}.md`, raw: newPost(id, currentFeed?.id), base: null })
-    if (channel === recommendations) setChannel(all)
-    setView(window.innerWidth > 1150 ? 'split' : 'markdown')
-    setNotice('')
-  }
-
-  function save(asCopy = false) {
-    if (!editor) return
-    void run(async () => {
-      const id = crypto.randomUUID()
-      const file = asCopy ? `${id}.md` : editor.file
-      const raw = asCopy ? copyPost(editor.raw, id) : editor.raw
-      await workspace.write(`posts/${file}`, raw, asCopy ? null : editor.base)
-      setEditor({ file, raw, base: raw })
-      await refresh(workspace)
-      setNotice(asCopy ? 'Saved as a new draft.' : workspace.mode === 'demo' ? 'Saved for this demo session.' : 'Draft saved to disk.')
-    })
-  }
-
-  function handleSuggestion(item: Suggestion, follow: boolean) {
-    void run(async () => {
-      if (follow) {
-        await workspace.write(`feeds/${item.id}.yaml`, stringify({
-          id: item.id, name: item.name, url: item.url, ...(item.description ? { description: item.description } : {}),
-        }), null)
-      } else {
-        await workspace.write(`suggestions/${item.file}`, stringify({ ...readYaml(item.raw), status: 'dismissed' }), item.raw)
-      }
-      await refresh(workspace)
-      setNotice(follow ? `Following ${item.name}.` : `Dismissed ${item.name}.`)
-    })
-  }
-
-  function addFeed(event: FormEvent<HTMLFormElement>) {
+  async function openRemote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const fields = new FormData(event.currentTarget)
-    const name = String(fields.get('name') || '').trim()
-    const address = String(fields.get('url') || '').trim()
-    if (!name || (address && !webUrl(address))) {
-      setError('Enter a feed name and, if supplied, a valid HTTP or HTTPS URL.')
-      return
-    }
-    void run(async () => {
-      const id = crypto.randomUUID()
-      await workspace.write(`feeds/${id}.yaml`, stringify({ id, name, ...(address ? { url: webUrl(address) } : {}) }), null)
-      await refresh(workspace)
-      setAddingFeed(false)
-    })
+    const form = new FormData(event.currentTarget)
+    await load(() => remoteRepository(String(form.get('repository')), String(form.get('ref'))))
+    setRemoteForm(false)
   }
 
-  const channelTitle = channel === recommendations ? 'Feed suggestions' : currentFeed?.name || 'All posts'
-  const channelDescription = channel === recommendations ? 'Review feeds suggested for this workspace.' : currentFeed?.description || (currentFeed ? 'Posts in this feed.' : 'Browse and edit your Markdown drafts.')
+  async function reload() {
+    if (data?.repo.refresh) await load(data.repo.refresh, false)
+    else if (data?.repo.label === 'Example repository') return
+    else chooseFolder()
+  }
+
+  const snapshot = data?.snapshot
+  const query = search.trim().toLowerCase()
+  const availableTags = [...new Set(snapshot?.posts.flatMap(post => post.tags))].sort()
+  const matches = (entry: FeedEntry) => !query ||
+    [entry.title, entry.summary, entry.body, ...entry.sources.map(source => source.title || source.url)]
+      .some(value => value.toLowerCase().includes(query))
+  const filtered = snapshot?.posts.filter(post => matches(post) && (!tag || post.tags.includes(tag)) && (!onlyDrafts || post.draft)) || []
+  const sitePosts = snapshot?.posts.filter(post => post.draft ? showDrafts
+    : !!post.date && !!post.route && (!snapshot.section || post.route.startsWith(snapshot.section + '/'))) || []
+  const sources = new Map<string, { title: string; publisher: string; posts: Set<string> }>()
+  for (const post of snapshot?.posts || []) for (const source of post.sources) {
+    const existing = sources.get(source.url)
+    if (existing) existing.posts.add(post.title)
+    else sources.set(source.url, {
+      title: source.title || new URL(source.url).hostname, publisher: source.publisher || new URL(source.url).hostname,
+      posts: new Set([post.title]),
+    })
+  }
+  const external = (feedResults || []).filter(feed => !activeFeed || feed.url === activeFeed)
+    .flatMap(feed => feed.entries.map(entry => ({ ...entry, origin: feed.name })))
+  const activity = [...external, ...(includePosts ? (snapshot?.posts || []).filter(post => !post.draft)
+    .map(post => ({ ...post, origin: 'Repository' })) : [])].filter(matches)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || '') || a.title.localeCompare(b.title))
+  const descriptions: Record<Page, string> = {
+    posts: 'Browse Markdown from the selected repository.',
+    preview: 'Preview the expandable feed with mndsite’s published layout.',
+    feeds: 'Read RSS and Atom subscriptions from this repository.',
+    sources: 'Find the articles, videos, and podcasts referenced by posts.',
+  }
+  const active = navigation.find(item => item.id === page)!
 
   return (
     <div className="app">
-      <header className="topbar">
-        <button className="brand" onClick={() => selectChannel(all)} aria-label="Trendly, all posts">
-          <span className="brand-icon"><TrendingUp size={20} /></span> trendly
+      <header className="navbar">
+        <button className="brand" onClick={() => navigate('posts')}>
+          <span className="brand-mark"><Layers3 size={18} aria-hidden="true" /></span> Trendly
         </button>
-        <div className="topbar-workspace"><ChevronRight size={14} />{snapshot.name || 'Workspace'}</div>
-        <div className="topbar-actions">
-          <button className="icon-button refresh" title="Refresh workspace" aria-label="Refresh workspace" disabled={busy}
-            onClick={() => void run(async () => { await refresh(workspace); setNotice('Workspace refreshed.') })}><RefreshCw size={17} /></button>
-          <button className="icon-button" disabled={busy} aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'} title={dark ? 'Light theme' : 'Dark theme'} onClick={toggleTheme}>
-            {dark ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
-          <button className="button folder-button" disabled={busy} onClick={chooseFolder}><FolderOpen size={17} /> Open workspace</button>
+        <div className="repo-breadcrumb" title={data?.repo.label}>{data?.repo.label || 'Repository'}</div>
+        <div className="navbar-actions">
+          <button className="button" onClick={chooseFolder} disabled={busy}><FolderOpen size={16} /> <span>Open folder</span></button>
+          <input type="file" ref={fileInput} hidden {...{ webkitdirectory: '' }} onChange={event => {
+            const files = event.currentTarget.files
+            if (files?.length) {
+              const imported = importFolder(files)
+              void load(() => imported)
+            }
+            event.currentTarget.value = ''
+          }} />
+          <button className="button" onClick={() => setRemoteForm(!remoteForm)} aria-expanded={remoteForm}><Github size={16} /> <span>Open GitHub</span></button>
+          <button className="icon-button" aria-label={dark ? 'Light theme' : 'Dark theme'} onClick={() => setDark(!dark)}>{dark ? <Sun size={17} /> : <Moon size={17} />}</button>
         </div>
       </header>
 
       <div className="layout">
-        <aside className="sidebar" aria-label="Workspace navigation">
-          <div className="sidebar-content">
-            <button className="button primary new-button" disabled={busy} onClick={createDraft}><Plus size={18} /> New draft</button>
-            <nav aria-label="Workspace">
-              <p className="section-label">Workspace</p>
-              <button className={`nav-row ${channel === all ? 'active' : ''}`} aria-current={channel === all ? 'page' : undefined} onClick={() => selectChannel(all)}>
-                <List size={17} /> All posts <span className="nav-count">{snapshot.posts.length}</span>
-              </button>
-              <button className={`nav-row ${channel === recommendations ? 'active' : ''}`} aria-current={channel === recommendations ? 'page' : undefined} onClick={() => selectChannel(recommendations)}>
-                <Lightbulb size={17} /> Feed suggestions {available.length > 0 && <span className="nav-count">{available.length}</span>}
-              </button>
-            </nav>
-            <nav aria-label="Feeds">
-              <div className="sidebar-heading"><p className="section-label">Feeds</p>
-                <button className="icon-button" aria-label="Add feed" title="Add feed" aria-expanded={addingFeed} disabled={busy} onClick={() => setAddingFeed(!addingFeed)}><Plus size={16} /></button>
-              </div>
-              {addingFeed && <form className="feed-form" onSubmit={addFeed}>
-                <label>Feed name<input name="name" required autoFocus /></label>
-                <label>Feed URL (optional)<input name="url" type="url" /></label>
-                <button type="submit" className="button" disabled={busy}>Add feed</button>
-              </form>}
-              {snapshot.feeds.map((feed) => (
-                <button key={feed.id} className={`nav-row ${currentFeed?.id === feed.id ? 'active' : ''}`}
-                  aria-current={currentFeed?.id === feed.id ? 'page' : undefined} onClick={() => selectChannel(`feed:${feed.id}`)}>
-                  <Hash size={17} /><span className="nav-name">{feed.name}</span>
-                  <span className="nav-count">{snapshot.posts.filter((post) => post.feeds.includes(feed.id)).length}</span>
-                </button>
-              ))}
-              {!snapshot.feeds.length && !addingFeed && <p className="sidebar-empty">No feeds yet</p>}
-            </nav>
+        <aside className="sidebar">
+          <div className="sidebar-repo">
+            <strong>{snapshot?.title || 'Repository'}</strong>
+            <span>{data?.repo.revision ? data.repo.revision.slice(0, 8) : data?.repo.label === 'Example repository' ? 'Example repository' : 'Working files'}</span>
           </div>
-          <div className="sidebar-footer">
-            <FolderOpen size={17} /><div><strong>{workspace.mode === 'demo' ? 'Example workspace' : 'Local workspace'}</strong>
-              <span>{workspace.mode === 'demo' ? 'Changes reset on reload' : 'Files on this device'}</span></div>
-          </div>
+          <nav aria-label="Repository views">
+            {navigation.map(({ id, title, icon: Icon }) => <button key={id} aria-current={page === id ? 'page' : undefined}
+              onClick={() => navigate(id)}><Icon size={17} aria-hidden="true" /> {title}</button>)}
+          </nav>
+          <div className="sidebar-foot"><BookOpen size={16} /> <span>Repository explorer</span></div>
         </aside>
 
-        <main className="main">
-          <div className="channel-header">
-            <div><h1>{channelTitle}</h1><p>{channelDescription}</p></div>
-            {currentFeed?.url && <a className="button" href={currentFeed.url} target="_blank" rel="noreferrer">Open feed</a>}
+        <main>
+          {remoteForm && <form className="remote-form" onSubmit={openRemote}>
+            <label>GitHub repository<input name="repository" placeholder="owner/repository" required autoFocus /></label>
+            <label>Branch, tag, or commit<input name="ref" placeholder="Default branch" /></label>
+            <button className="button primary" type="submit" disabled={busy}>Open repository</button>
+            <button className="icon-button" type="button" aria-label="Close repository form" onClick={() => setRemoteForm(false)}><X size={17} /></button>
+          </form>}
+          <div className="page-heading">
+            <div className="breadcrumb">{snapshot?.title || 'Repository'} <span aria-hidden="true">/</span> {active.title}</div>
+            <h1>{page === 'preview' && snapshot?.section ? snapshot.section.split('/').at(-1)!.replace(/[-_]/g, ' ').replace(/^./, char => char.toUpperCase()) : active.title}</h1>
+            <p>{page === 'posts' && snapshot?.description ? snapshot.description : descriptions[page]}</p>
           </div>
-          {error && <div className="banner warning" role="alert"><AlertCircle size={17} />{error}</div>}
-          {snapshot.issues.length > 0 && <details className="banner workspace-issues"><summary>{snapshot.issues.length} workspace file {snapshot.issues.length === 1 ? 'issue' : 'issues'}</summary>
-            <ul>{snapshot.issues.map((issue) => <li key={issue}>{issue}</li>)}</ul></details>}
-          {channel === recommendations ? (
-            <section className="suggestion-list" aria-label="Suggested feeds">
-              {available.map((item) => <article className="suggestion" key={item.id}>
-                <span className="source-icon"><Lightbulb size={20} /></span>
-                <div><h2>{item.name}</h2>{item.description && <p>{item.description}</p>}
-                  <a href={item.url} target="_blank" rel="noreferrer">{new URL(item.url).hostname}</a>
-                  <div className="suggestion-actions">
-                    <button className="button primary" disabled={busy} onClick={() => handleSuggestion(item, true)}><Plus size={16} /> Follow</button>
-                    <button className="button" disabled={busy} onClick={() => handleSuggestion(item, false)}>Dismiss</button>
-                  </div>
-                </div>
+          {error && <div className="notice" role="alert"><CircleHelp size={18} />{error}</div>}
+          <div className="controls">
+            {page !== 'preview' && <label className="search"><Search size={16} /><input aria-label={`Search ${active.title.toLowerCase()}`}
+              placeholder={`Search ${active.title.toLowerCase()}…`} value={search} onChange={event => setSearch(event.target.value)} /></label>}
+            {page === 'posts' && <>
+              {availableTags.length > 0 && <select aria-label="Filter by tag" value={tag} onChange={event => setTag(event.target.value)}>
+                <option value="">All tags</option>{availableTags.map(value => <option key={value}>{value}</option>)}
+              </select>}
+              {snapshot?.posts.some(post => post.draft) && <label className="filter"><input type="checkbox" checked={onlyDrafts} onChange={event => setOnlyDrafts(event.target.checked)} /> Drafts only</label>}
+            </>}
+            {page === 'preview' && <>
+              {snapshot?.posts.some(post => post.draft) && <label className="filter"><input type="checkbox" checked={showDrafts} onChange={event => setShowDrafts(event.target.checked)} /> Include drafts</label>}
+              {snapshot?.rss && <a className="button" href={snapshot.rss} target="_blank" rel="noreferrer"><Rss size={15} /> RSS</a>}
+            </>}
+            {page === 'feeds' && (snapshot?.subscriptions.length ?? 0) > 0 &&
+              <select aria-label="Choose an external feed" value={activeFeed} onChange={event => setActiveFeed(event.target.value)}>
+                <option value="">All feeds</option>{snapshot?.subscriptions.map(feed => <option key={feed.url} value={feed.url}>{feed.name}</option>)}
+              </select>}
+            {page === 'feeds' && <label className="filter"><input type="checkbox" checked={includePosts}
+              onChange={event => setIncludePosts(event.target.checked)} /> Include repository posts</label>}
+            {page === 'feeds' ? (
+              <button className="button reload" disabled={loadingFeeds || !snapshot?.subscriptions.length} onClick={() => void refreshFeeds()}><RefreshCw size={15} /> Refresh feeds</button>
+            ) : data?.repo.label !== 'Example repository' && <button className="button reload" disabled={busy} onClick={() => void reload()}><RefreshCw size={15} /> Refresh</button>}
+          </div>
+
+          {busy && <p className="activity" role="status">Loading repository…</p>}
+          {data && (page === 'posts' || page === 'preview') && <>
+            <p className="count">{(page === 'posts' ? filtered : sitePosts).length} posts</p>
+            <Feed entries={page === 'posts' ? filtered : sitePosts} key={`${page}-${data.repo.label}`}
+              resolveImage={(value, entry) => repoAsset(data.repo, value, entry)} />
+          </>}
+          {page === 'sources' && <div className="source-list">
+            {[...sources].filter(([url, source]) => `${url} ${source.title} ${[...source.posts].join(' ')}`.toLowerCase().includes(query))
+              .map(([url, source]) => <article key={url}><span>{source.publisher}</span>
+                <a href={url} target="_blank" rel="noreferrer">{source.title}</a>
+                <p>{[...source.posts].join(' · ')}</p>
               </article>)}
-              {!available.length && <div className="empty-state"><Lightbulb size={24} /><h2>No suggestions to review</h2><p>Suggestions added to the workspace will appear here.</p></div>}
-            </section>
-          ) : (
-            <div className="content-grid">
-              <section className="post-list" aria-label="Posts">
-                <p className="section-label">{visiblePosts.length} {visiblePosts.length === 1 ? 'post' : 'posts'}</p>
-                {visiblePosts.map((post) => (
-                  <button className={`post-card ${editor?.file === post.file ? 'selected' : ''}`} key={post.file}
-                    aria-pressed={editor?.file === post.file} onClick={() => selectPost(post)}>
-                    <span className="post-meta"><FileText size={15} /> {displayDate(post.updatedAt)}</span>
-                    <strong>{post.title}</strong>
-                    <span className="post-excerpt">{post.body.split(/\r?\n/).find((line) => line.trim() && !line.startsWith('#')) || 'Empty draft'}</span>
-                    {post.tags.length > 0 && <span className="tags">{post.tags.slice(0, 2).map((tag) => <span key={tag}>{tag}</span>)}</span>}
-                  </button>
-                ))}
-                {!visiblePosts.length && <p className="muted">No posts in this view.</p>}
-              </section>
-              <section className="detail" aria-label="Post editor">
-                {editor && draft ? <>
-                  <div className="editor-toolbar">
-                    <div className="editor-tabs" role="group" aria-label="Editor view">
-                      <button aria-pressed={view === 'preview'} onClick={() => setView('preview')}><BookOpen size={16} /> Preview</button>
-                      <button aria-pressed={view === 'markdown'} onClick={() => setView('markdown')}><FileText size={16} /> Markdown</button>
-                      <button aria-pressed={view === 'split'} onClick={() => setView('split')}><Columns2 size={16} /> Split</button>
-                    </div>
-                    <button className="button save-button" disabled={!dirty || conflict || busy} onClick={() => save()}><Save size={15} /> Save draft</button>
-                  </div>
-                  {conflict && <div className="banner warning conflict" role="alert"><AlertCircle size={17} />
-                    <div><strong>{disk ? 'This draft changed on disk.' : 'This draft was removed from disk.'}</strong> Your edits are still here.
-                      <div className="conflict-actions">
-                        <button className="button" disabled={busy} onClick={() => setEditor(disk ? draftFrom(disk) : null)}>{disk ? 'Load disk version' : 'Close draft'}</button>
-                        <button className="button" disabled={busy} onClick={() => save(true)}>Save edits as a copy</button>
-                      </div>
-                    </div>
-                  </div>}
-                  {draft.issues.length > 0 && <div className="banner warning">{draft.issues.join(' ')}</div>}
-                  <div className={`editor-content view-${view}`}>
-                    {view !== 'preview' && <div className="markdown-pane">
-                      <label htmlFor="markdown-input">Markdown draft</label>
-                      <textarea id="markdown-input" value={editor.raw} spellCheck={false} disabled={busy}
-                        onChange={(event) => setEditor({ ...editor, raw: event.target.value })} />
-                    </div>}
-                    {view !== 'markdown' && <Preview post={draft} workspace={workspace} />}
-                  </div>
-                  <div className="editor-status"><span>{dirty ? 'Unsaved changes' : workspace.mode === 'demo' ? 'Example draft' : 'Saved locally'}</span></div>
-                </> : <div className="empty-state"><FileText size={26} /><h2>Open a draft</h2><p>Select a post card or start a new draft.</p></div>}
-              </section>
-            </div>
-          )}
-          <div className="feedback" role="status" aria-live="polite">
-            {notice && <button title="Dismiss message" onClick={() => setNotice('')}><Check size={16} />{notice}</button>}
-          </div>
+            {sources.size === 0 && <p className="activity">This repository has no post sources.</p>}
+          </div>}
+          {page === 'feeds' && <>
+            {loadingFeeds && <p className="activity" role="status">Loading feeds…</p>}
+            {snapshot?.subscriptions.length === 0 && <p className="activity">No subscriptions defined in feeds.yaml.</p>}
+            {feedResults?.filter(feed => feed.error && (!activeFeed || feed.url === activeFeed)).map(feed =>
+              <p className="notice" key={feed.url}>{feed.name} could not be loaded. {feed.error}</p>)}
+            <Feed entries={activity} resolveImage={(value, entry) => data && entry.path ? repoAsset(data.repo, value, entry) : undefined} />
+          </>}
         </main>
       </div>
     </div>

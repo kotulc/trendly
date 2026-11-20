@@ -1,10 +1,8 @@
 ---
-version: 1
-id: tools-we-think-with
 title: The tools we think with
-feeds: [technology]
+description: What changes when the tools we use give us ownership of the things we make?
 tags: [local-first, software]
-updated_at: 2026-11-17
+date: 2026-11-17
 sources:
   - url: https://www.inkandswitch.com/local-first/
     kind: article

@@ -1,10 +1,8 @@
 ---
-version: 1
-id: designing-for-attention
 title: Designing for attention
-feeds: [design]
+description: An observation about how everyday objects teach people to use them.
 tags: [design, attention]
-updated_at: 2026-11-16
+date: 2026-11-16
 sources:
   - url: https://99percentinvisible.org/
     kind: podcast

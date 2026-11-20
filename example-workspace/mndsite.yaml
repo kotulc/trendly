@@ -1,0 +1,8 @@
+title: Field Notes
+description: Notes on the tools, ideas, and questions worth keeping.
+content: ./content
+feed_url: posts
+expandable_feed: true
+theme:
+  color: default
+  typeset: sans
