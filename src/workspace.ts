@@ -36,13 +36,40 @@ async function fileAt(root: Directory, path: string, create = false) {
   return folder.getFileHandle(filename, { create })
 }
 
-export function supportsWorkspace() {
-  return typeof (window as PickerWindow).showDirectoryPicker === 'function'
+async function localRequest(op: string, data: Record<string, unknown> = {}) {
+  const response = await fetch('/__trendly/workspace', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ op, ...data }),
+  })
+  if (response.status === 409) throw new WorkspaceConflict()
+  if (!response.ok) {
+    if (response.headers.get('Content-Type')?.includes('application/json')) {
+      const { error } = await response.json()
+      throw new Error(error)
+    }
+    throw new Error('To open a folder in this browser, start Trendly with npm run workspace -- "path-to-folder" and open the address it prints.')
+  }
+  return response
+}
+
+async function openLocalWorkspace(): Promise<Workspace> {
+  await localRequest('open')
+  return {
+    mode: 'disk',
+    async read(path) { return (await localRequest('read', { path })).json() },
+    async list(folder) { return (await localRequest('list', { folder })).json() },
+    async write(path, raw, expected) { await localRequest('write', { path, raw, expected }) },
+    async asset(path) {
+      const response = await localRequest('asset', { path })
+      return response.status === 204 ? undefined : response.blob()
+    },
+  }
 }
 
 export async function openWorkspace(): Promise<Workspace> {
   const picker = (window as PickerWindow).showDirectoryPicker
-  if (!picker) throw new Error('Open this app in desktop Chrome or Edge to select a workspace folder.')
+  if (!picker) return openLocalWorkspace()
   const root = await picker.call(window, { mode: 'readwrite', id: 'trendly-workspace' })
 
   const workspace: Workspace = {

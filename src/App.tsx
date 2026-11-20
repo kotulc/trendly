@@ -3,7 +3,7 @@ import { AlertCircle, BookOpen, Check, ChevronRight, Columns2, FileText, FolderO
 import { stringify } from 'yaml'
 import { copyPost, newPost, readPost, readYaml, webUrl, type Post, type Snapshot, type Suggestion } from './model'
 import { Preview } from './Preview'
-import { demoWorkspace, openWorkspace, scanWorkspace, supportsWorkspace, WorkspaceConflict, type Workspace } from './workspace'
+import { demoWorkspace, openWorkspace, scanWorkspace, WorkspaceConflict, type Workspace } from './workspace'
 
 type Editor = { file: string; raw: string; base: string | null }
 type View = 'preview' | 'markdown' | 'split'
@@ -266,7 +266,6 @@ export function App() {
             <div><h1>{channelTitle}</h1><p>{channelDescription}</p></div>
             {currentFeed?.url && <a className="button" href={currentFeed.url} target="_blank" rel="noreferrer">Open feed</a>}
           </div>
-          {!supportsWorkspace() && <div className="banner"><AlertCircle size={17} /> Use desktop Chrome or Edge to open and edit local workspaces.</div>}
           {error && <div className="banner warning" role="alert"><AlertCircle size={17} />{error}</div>}
           {snapshot.issues.length > 0 && <details className="banner workspace-issues"><summary>{snapshot.issues.length} workspace file {snapshot.issues.length === 1 ? 'issue' : 'issues'}</summary>
             <ul>{snapshot.issues.map((issue) => <li key={issue}>{issue}</li>)}</ul></details>}

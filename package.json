@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "workspace": "node scripts/open-workspace.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview"
   },
