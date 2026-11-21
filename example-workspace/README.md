@@ -10,4 +10,4 @@ This content-only folder is the example repository bundled with Trendly. Open it
 
 The two FR Wheelworks examples adapt excerpts and photos from the original posts. The [original license](frwheelworks-license.txt) is included. The full archive and screenshots live in the [FR Wheelworks repository](https://github.com/kotulc/frwheelworks).
 
-Point a standalone mndsite build at this folder's `mndsite.yaml`. When publishing to a real destination, set `rss.site_url` to the public base URL. The same folder can be opened in Trendly to review posts and drafts as you edit.
+Point a standalone mndsite build at this folder's `mndsite.yaml`. When publishing to a real destination, set `rss.site_url` to the public base URL. Subscribe to the deployed `rss.xml` URL to read the published entries in Trendly's **External feeds**. Open the folder in Trendly to review posts and drafts as you edit.

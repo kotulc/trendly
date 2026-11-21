@@ -1,21 +1,21 @@
 # Trendly
 
-Trendly is a browser-first explorer for Git-managed Markdown, media, and feeds. Open a local checkout or a public GitHub repository, browse posts and sources, and search or filter the results. External editors and agents such as Herder edit the files. Trendly can commit publish and unpublish moves on a GitHub branch, where the repository's existing publishing workflow deploys the public site.
+Trendly is a browser-first workspace for previewing a site's Git-managed posts and reading subscribed feeds. Open a local checkout or a public GitHub repository to load the host site's configuration, Markdown posts, drafts, and media. External editors and agents such as Herder edit the files. Trendly can commit publish and unpublish moves on a GitHub branch, where the repository's existing publishing workflow deploys the public site.
 
 ## Explore a repository
 
-- **Browse a repository.** Use a simple Pages CMS–style sidebar and list for posts, sources, and subscribed feeds. Local and remote inputs produce the same in-memory view.
+- **Browse the host site.** Use **Posts** and **Site feed** to work with the content from the open repository. Local and remote inputs produce the same in-memory view.
 - **Preview the published feed.** A compact list shows each post's media type, title, source, and date. Open one post at a time to see its summary, metadata, full Markdown, and rich media across the column. Trendly's local preview can also show clearly marked drafts and reload after an editor or agent changes the files.
-- **Read external feeds.** Browse combined or individual RSS and Atom subscriptions. To include your site's posts, subscribe to its published RSS feed. Direct browser fetch is the default, with an optional proxy for feeds that block browser reads.
+- **Read external feeds.** Browse combined or individual RSS and Atom subscriptions in **External feeds**. Use **Sources** to manage subscriptions. Direct browser fetch is the default, with an optional proxy for feeds that block browser reads.
 - **Manage feed configuration.** Edit site feed options in `mndsite.yaml` and subscriptions in `feeds.yaml`. Review the staged YAML changes before writing to the checkout or committing to GitHub.
 
 ## Repository and publishing
 
-The repository owns the source files and configuration. Read `mndsite.yaml` for the published content directory, assets, and supported frontmatter settings. Keep external subscription URLs in a separate, small `feeds.yaml`. Use the same post files and source metadata for the explorer and the published site.
+The host repository stores the site's posts and configuration. `mndsite.yaml` configures the published content directory, assets, and supported frontmatter settings. `feeds.yaml` stores the feed URLs Trendly subscribes to. Post frontmatter stores publisher and citation details for the post cards and filters.
 
-[mndsite](https://github.com/kotulc/mndsite) remains a standalone static-site builder. Extend it where useful with a general-purpose expandable Markdown feed that any mndsite site can opt into. Reuse the portable feed view in Trendly so the rows and expanded posts match the published site. mndsite owns its configuration and deployment workflow. Trendly owns repository browsing, runtime RSS, and draft preview. Each application can be used independently.
+mndsite can build a public site from the host repository and publish `rss.xml` when `rss.site_url` is set in `mndsite.yaml`. To read that site's published posts in **External feeds**, subscribe to the deployed `rss.xml` URL. Trendly and mndsite share the post card layout and can run independently. [mndsite](https://github.com/kotulc/mndsite)
 
-Keep drafts and their draft-only media outside mndsite's published inputs. Open a GitHub branch to use **Publish** or **Unpublish** from Posts. The action commits the Markdown move between `drafts/` and the published content tree. The [user guide](user_guide.md) covers authentication, destination paths, and deployment.
+Use the **Site feed** switches to update the `drafts` list in `mndsite.yaml` for posts in the content tree. mndsite builds with draft-list support omit those posts from the public site and RSS. Existing files in `drafts/` can still be published by moving them into the content tree. Keep draft-only media outside the published asset directories. The [user guide](user_guide.md) covers writing changes and deployment.
 
 ## Run locally
 
@@ -27,10 +27,14 @@ The static build is available with `npm run build`. Chrome and Edge can reread a
 
 In `feeds.yaml`, list subscription names and URLs under `feeds`. If some sources block browser reads, set an optional `proxy_url` pointing to a trusted service that accepts the feed URL as a `url` query parameter. Trendly tries the original feed first.
 
+**Sources** lists configured subscriptions, RSS and Atom URLs recognized in post citations, and the host site's RSS URL when configured. Support for more feed formats is planned. [Implementation plan](implementation_plan.md#5-refine-sources-and-expand-feed-format-support)
+
 ## Post cards
 
 Use `description` for the card excerpt and `site` for a publication label. The first source determines the media icon from its type or URL. Status, categories, and tags appear as chips. Add other fields under `frontmatter.facets` in `mndsite.yaml`. Trendly also uses the configured tags and status for the Posts filters.
 
-Inside the Markdown body, give a YouTube or direct audio link the title `"embed"` to show a click-to-load player. The original link remains available. Set `placement: inline` on the corresponding source entry to show the player only in the body.
+In Markdown, use standard image syntax and give a YouTube, Vimeo, or direct audio or video link the title `"embed"` to show a click-to-load player. Source metadata also accepts `audio_url` and `video_url` for direct media files. Set `placement: inline` on the corresponding source entry when the body already contains the player.
+
+Expanded RSS and Atom cards show images and native audio and video from feed content. They also read media enclosures and recognize YouTube and Vimeo embeds. The feed must supply a media file, an image URL, or a supported embed. For feeds that publish excerpts, use **Open full post** to see media that appears only on the publisher's page.
 
 The portable feed component, metadata helper, and stylesheet come from mndsite and are vendored in `src/feed/` so either project can build independently. Keep those files in sync when changing the shared cards.

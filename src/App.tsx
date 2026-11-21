@@ -1,19 +1,20 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { ArrowDownToLine, ArrowUpToLine, CircleHelp, FolderOpen, Github, Layers3, Link2, List, Moon, Plus, RefreshCw, Rss, Settings, Sun, Trash2, X } from 'lucide-react'
 import Feed, { entryMediaType, FeedCard, type FeedEntry } from './feed/Feed'
-import { exampleRepository, importFolder, loadRepository, openFolder, publicationPath, remoteRepository, repoAsset, website, type Commit, type ConfigChange, type ConfigFile, type Repository, type Snapshot } from './repository'
+import { exampleRepository, importFolder, loadRepository, normalizeSubscriptions, openFolder, publicationPath, remoteRepository, repoAsset, website, type Commit, type ConfigChange, type ConfigFile, type Repository, type Snapshot, type Subscription } from './repository'
 import { ConfigDialog } from './ConfigDialog'
-import { subscriptionDrafts, updateSubscriptions, type SubscriptionDraft } from './config'
+import { subscriptionDrafts, updatePostDraft, updateSubscriptions, type SubscriptionDraft } from './config'
 import { PublicationDialog, type PublicationCommit } from './PublicationDialog'
 import { feedFormatHint, fetchFeed, type FeedFormat } from './rss'
 
 type Page = 'posts' | 'preview' | 'feeds' | 'sources'
 type Loaded = { repo: Repository; snapshot: Snapshot }
-type FeedResult = { url: string; name: string; entries: FeedEntry[]; format?: FeedFormat; error?: string }
-type SourceSummary = { name: string; published: Set<string>; feeds: string[]; posts: Set<string>; subscriptions: SubscriptionDraft[]; removed: SubscriptionDraft[]; knownFeeds: Map<string, FeedFormat> }
+type FeedResult = { name: string; entries: FeedEntry[]; format?: FeedFormat; error?: string }
+type FeedSource = { url?: string; candidate?: { name: string; format: FeedFormat }; subscriptions: SubscriptionDraft[]; removed: SubscriptionDraft[] }
 type PostView = 'posts' | 'preview'
 
 const mediaLabels = { article: 'Article', audio: 'Audio', video: 'Video', image: 'Image', link: 'Link' }
+const feedFormatLabels: Record<FeedFormat, string> = { rss: 'RSS', atom: 'Atom' }
 
 function byDate(direction: 'newest' | 'oldest') {
   return (a: FeedEntry, b: FeedEntry) => {
@@ -53,6 +54,7 @@ export function App() {
   const [tag, setTag] = useState('')
   const [status, setStatus] = useState('')
   const [sourceFilter, setSourceFilter] = useState('')
+  const [formatFilter, setFormatFilter] = useState('')
   const [sourceOrder, setSourceOrder] = useState('name')
   const [media, setMedia] = useState('')
   const [dateOrder, setDateOrder] = useState<'newest' | 'oldest'>('newest')
@@ -60,7 +62,7 @@ export function App() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [dark, setDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
-  const [feedResults, setFeedResults] = useState<FeedResult[]>()
+  const [feedByUrl, setFeedByUrl] = useState(() => new Map<string, FeedResult>())
   const [activeFeed, setActiveFeed] = useState('')
   const [sourceSelections, setSourceSelections] = useState<Record<PostView, string>>({ posts: '', preview: '' })
   const [loadingFeeds, setLoadingFeeds] = useState(false)
@@ -75,6 +77,7 @@ export function App() {
   const nextSubscriptionId = useRef(-1)
   const readVersion = useRef(0)
   const feedVersion = useRef(0)
+  const fetchingFeeds = useRef('')
   const foreground = useRef(false)
   const theme = data?.snapshot.color
 
@@ -98,11 +101,12 @@ export function App() {
       if (quiet && repo.stamp === data?.repo.stamp) { repo.dispose?.(); return }
       const snapshot = await loadRepository(repo)
       if (version !== readVersion.current) { repo.dispose?.(); return }
-      if (JSON.stringify(snapshot.subscriptions) !== JSON.stringify(data?.snapshot.subscriptions) ||
-        snapshot.proxy !== data?.snapshot.proxy || replace) {
+      if (snapshot.proxy !== data?.snapshot.proxy || replace) {
         ++feedVersion.current
         setLoadingFeeds(false)
-        setFeedResults(undefined)
+        setFeedByUrl(new Map())
+      }
+      if (replace) {
         setActiveFeed('')
       }
       setData({ repo, snapshot })
@@ -116,11 +120,13 @@ export function App() {
         setTag('')
         setStatus('')
         setSourceFilter('')
+        setFormatFilter('')
         setSourceOrder('name')
         setSourceSelections({ posts: '', preview: '' })
         setMedia('')
         setDateOrder('newest')
       }
+      return true
     } catch (failure) {
       repo?.dispose?.()
       if (version === readVersion.current && !(failure instanceof DOMException && failure.name === 'AbortError')) setError(message(failure))
@@ -171,23 +177,6 @@ export function App() {
 
   useEffect(() => () => data?.repo.dispose?.(), [data?.repo])
 
-  async function refreshFeeds(snapshot = data?.snapshot) {
-    if (!snapshot) return
-    const version = ++feedVersion.current
-    setLoadingFeeds(true)
-    try {
-      const results = await Promise.all(snapshot.subscriptions.map(async feed => {
-        try { return { ...feed, ...await fetchFeed(feed, snapshot.proxy) } }
-        catch (failure) { return { ...feed, entries: [], error: message(failure) } }
-      }))
-      if (version === feedVersion.current) setFeedResults(results)
-    } finally { if (version === feedVersion.current) setLoadingFeeds(false) }
-  }
-
-  useEffect(() => {
-    if ((page === 'feeds' || page === 'sources') && !feedResults && !loadingFeeds && data?.snapshot.subscriptions.length) void refreshFeeds()
-  }, [page, feedResults, loadingFeeds, data?.snapshot.subscriptions])
-
   function navigate(next: Page, post?: string) {
     setPage(next)
     setLinkedPost(post)
@@ -226,6 +215,35 @@ export function App() {
   const subscriptions = subscriptionEdits?.feeds ?? savedSubscriptions
   const removedSubscriptions = subscriptionEdits?.removed ?? []
   const subscriptionsChanged = !!subscriptionEdits
+  const readerSubscriptions = subscriptionEdits ? normalizeSubscriptions(subscriptions) : snapshot?.subscriptions ?? []
+  const readerKey = JSON.stringify(readerSubscriptions)
+  const readingFeeds = page === 'feeds' || page === 'sources'
+  const selectedFeed = readerSubscriptions.some(feed => feed.url === activeFeed) ? activeFeed : ''
+
+  async function refreshFeeds(feeds: Subscription[] = readerSubscriptions) {
+    if (!feeds.length) return
+    const version = ++feedVersion.current
+    fetchingFeeds.current = readerKey
+    setLoadingFeeds(true)
+    await Promise.all(feeds.map(async feed => {
+      let result: FeedResult
+      try { result = { ...feed, ...await fetchFeed(feed, snapshot?.proxy) } }
+      catch (failure) { result = { ...feed, entries: [], error: message(failure) } }
+      if (version === feedVersion.current) {
+        setFeedByUrl(current => new Map(current).set(feed.url, result))
+      }
+    }))
+    if (version === feedVersion.current) setLoadingFeeds(false)
+  }
+
+  useEffect(() => {
+    if (!readingFeeds || (loadingFeeds && fetchingFeeds.current === readerKey)) return
+    const missing = readerSubscriptions.filter(feed => feedByUrl.get(feed.url)?.name !== feed.name)
+    if (!missing.length) return
+    const timer = window.setTimeout(() => void refreshFeeds(missing), subscriptionsChanged ? 450 : 0)
+    return () => window.clearTimeout(timer)
+  }, [readingFeeds, readerKey, snapshot?.proxy, feedByUrl, loadingFeeds, subscriptionsChanged])
+
   const posts = snapshot?.posts || []
   const query = search.trim().toLowerCase()
   const facet = (entry: FeedEntry, name: string) => entry.facets?.find(item => item.name === name)?.values || []
@@ -236,91 +254,99 @@ export function App() {
   const matchesFilters = (entry: FeedEntry) => matches(entry) && (!tag || facet(entry, 'tags').includes(tag)) &&
     (!status || facet(entry, 'status').includes(status)) && (!media || entryMediaType(entry) === media)
   const repositoryPage = page === 'posts' || page === 'preview' ? page : undefined
-  const sources = new Map<string, SourceSummary>()
-  function sourceSummary(name: string, key = name.toLowerCase()) {
-    const existing = sources.get(key)
-    if (existing) return existing
-    const summary: SourceSummary = { name, published: new Set(), feeds: [], posts: new Set(), subscriptions: [], removed: [], knownFeeds: new Map() }
-    sources.set(key, summary)
-    return summary
-  }
-  const subscriptionNames = new Map(snapshot?.subscriptions.map(feed => [feed.url, feed.name]))
-  for (const post of snapshot?.posts || []) {
-    const cited = post.sources.map(citation => {
-      const format = feedFormatHint(citation.url, citation.kind)
-      const name = (format && subscriptionNames.get(citation.url)) || citation.publisher || new URL(citation.url).hostname.replace(/^www\./, '')
-      return { name, format, url: citation.url }
-    })
-    if (post.site || !cited.length) cited.push({ name: post.site || snapshot!.title, format: undefined, url: '' })
-    for (const citation of cited) {
-      const source = sourceSummary(citation.name)
-      if (citation.format) source.knownFeeds.set(citation.url, citation.format)
-      source.posts.add(post.id)
-      if (!post.draft) source.published.add(post.id)
+  const postPublishers = new Map<string, { name: string; posts: Set<string> }>()
+  if (repositoryPage) for (const post of posts) {
+    const names = post.sources.map(citation => citation.publisher || new URL(citation.url).hostname.replace(/^www\./, ''))
+    if (post.site || !names.length) names.push(post.site || snapshot!.title)
+    for (const name of names) {
+      const key = name.toLowerCase()
+      const publisher = postPublishers.get(key) ?? { name, posts: new Set<string>() }
+      publisher.posts.add(post.id)
+      postPublishers.set(key, publisher)
     }
   }
   const selectedSource = repositoryPage ? sourceSelections[repositoryPage] : ''
-  const selectedPosts = sources.get(selectedSource)?.posts
+  const selectedPosts = postPublishers.get(selectedSource)?.posts
   const listedPosts = repositoryPage ? posts.filter(post =>
     matchesFilters(post) && (!selectedPosts?.size || selectedPosts.has(post.id))).sort(byDate(dateOrder)) : undefined
   const sidebarFilter = repositoryPage ? {
-    label: `${page === 'posts' ? 'Posts' : 'Site feed'} sources`, all: 'All sources',
-    options: [...sources].filter(([, source]) => source.posts.size > 0)
-      .map(([key, source]) => ({ key, name: source.name })).sort((a, b) => a.name.localeCompare(b.name)),
+    label: `${page === 'posts' ? 'Posts' : 'Site feed'} publishers and citations`, all: 'All publishers',
+    options: [...postPublishers].map(([key, publisher]) => ({ key, name: publisher.name })).sort((a, b) => a.name.localeCompare(b.name)),
     selected: selectedPosts?.size ? selectedSource : '',
     select: (key: string) => setSourceSelections(current => ({ ...current, [repositoryPage]: key })),
   } : page === 'feeds' ? {
     label: 'Feed subscriptions', all: 'All feeds',
-    options: (snapshot?.subscriptions || []).map(feed => ({ key: feed.url, name: feed.name })),
-    selected: activeFeed, select: setActiveFeed,
+    options: readerSubscriptions.map(feed => ({ key: feed.url, name: feed.name })),
+    selected: selectedFeed, select: setActiveFeed,
   } : undefined
-  const feedEntries = (feedResults || []).filter(feed => !activeFeed || feed.url === activeFeed)
-    .flatMap(feed => feed.entries.map(entry => ({ ...entry, origin: feed.name })))
+  const visibleFeeds = readerSubscriptions.filter(feed => !selectedFeed || feed.url === selectedFeed)
+  const feedEntries = visibleFeeds.flatMap(feed => (feedByUrl.get(feed.url)?.entries ?? [])
+    .map(entry => ({ ...entry, origin: feed.name })))
   const activity = feedEntries.filter(matchesFilters).sort(byDate(dateOrder))
   const filterEntries = page === 'feeds' ? feedEntries : posts
   const availableTags = [...new Set(filterEntries.flatMap(entry => facet(entry, 'tags')))].sort()
   const availableStatuses = [...new Set(filterEntries.flatMap(entry => facet(entry, 'status')))].sort()
-  const feedByUrl = new Map(feedResults?.map(feed => [feed.url, feed]))
+  const sources = new Map<string, FeedSource>()
+  function feedSource(key: string, url?: string) {
+    const source = sources.get(key) ?? { url, subscriptions: [], removed: [] }
+    sources.set(key, source)
+    return source
+  }
   if (page === 'sources') {
-    const originals = new Map(savedSubscriptions.map(feed => [feed.id, feed]))
-    const enabled = new Set(subscriptions.map(feed => feed.id))
-    for (const feed of [...subscriptions, ...removedSubscriptions]) {
-      const original = originals.get(feed.id)
-      const url = website(original?.url)
-      const originalName = original?.name.trim() || (url && new URL(url).hostname)
-      const source = originalName ? sourceSummary(originalName)
-        : sourceSummary(feed.name.trim() || 'New subscription', feed.sourceKey ?? `\0${feed.id}`)
-      if (enabled.has(feed.id)) {
-        source.subscriptions.push(feed)
-        if (url && !source.feeds.includes(url)) source.feeds.push(url)
-      } else source.removed.push(feed)
+    if (snapshot?.rss) feedSource(snapshot.rss, snapshot.rss).candidate = { name: snapshot.title, format: 'rss' }
+    for (const post of posts) for (const citation of post.sources) {
+      const format = feedFormatHint(citation.url, citation.kind)
+      if (!format) continue
+      const source = feedSource(citation.url, citation.url)
+      source.candidate ??= { name: citation.publisher || new URL(citation.url).hostname, format }
+    }
+    for (const [drafts, group] of [[subscriptions, 'subscriptions'], [removedSubscriptions, 'removed']] as const) {
+      for (const feed of drafts) {
+        const url = website(feed.url)
+        feedSource(url ?? `draft:${feed.id}`, url)[group].push(feed)
+      }
     }
   }
-  const availableSources = [...sources.entries()].filter(([, source]) => source.posts.size > 0 || source.subscriptions.length > 0 || source.removed.length > 0)
-  const listedSources = availableSources.filter(([, source]) =>
-    [source.name, ...source.knownFeeds.keys(), ...[...source.subscriptions, ...source.removed].flatMap(feed => [feed.name, feed.url])].some(value => value.toLowerCase().includes(query)) &&
-    (sourceFilter !== 'subscriptions' || source.subscriptions.length > 0 || source.removed.length > 0) && (sourceFilter !== 'posts' || source.posts.size > 0))
-    .sort(([aKey, a], [bKey, b]) => (bKey.startsWith('\0') ? Math.min(b.subscriptions[0]?.id ?? 0, 0) : 0) -
-      (aKey.startsWith('\0') ? Math.min(a.subscriptions[0]?.id ?? 0, 0) : 0) ||
-      (sourceOrder === 'published' ? b.published.size - a.published.size : 0) || a.name.localeCompare(b.name))
+  const listedSources = [...sources.values()].map(source => {
+    const draft = source.subscriptions[0] ?? source.removed[0]
+    const result = source.url ? feedByUrl.get(source.url) : undefined
+    const format = result?.format ?? source.candidate?.format ?? (source.url ? feedFormatHint(source.url) : undefined)
+    const name = draft?.name.trim() || source.candidate?.name || (source.url ? new URL(source.url).hostname : 'New subscription')
+    const entryCount = result && !result.error ? result.entries.length : undefined
+    return { ...source, key: draft ? `draft:${draft.id}` : source.url!, name, result, format, draft, entryCount }
+  }).filter(source =>
+    [source.name, source.url ?? source.draft?.url ?? ''].some(value => value.toLowerCase().includes(query)) &&
+    (!formatFilter || source.format === formatFilter) &&
+    (!sourceFilter || (source.subscriptions.length > 0) === (sourceFilter === 'subscribed')))
+    .sort((a, b) => Math.min(a.draft?.id ?? 0, 0) - Math.min(b.draft?.id ?? 0, 0) ||
+      (sourceOrder === 'entries' ? (b.entryCount ?? -1) - (a.entryCount ?? -1) : 0) ||
+      a.name.localeCompare(b.name) || (a.url ?? '').localeCompare(b.url ?? ''))
   const visibleCount = page === 'sources' ? listedSources.length : page === 'feeds' ? activity.length : listedPosts?.length ?? 0
-  const totalCount = page === 'sources' ? availableSources.length : page === 'feeds' ? feedEntries.length : posts.length
-  const countLabel = page === 'sources' ? 'source' : 'post'
-  const countText = `${visibleCount}${visibleCount < totalCount ? ` of ${totalCount}` : ''} ${countLabel}${(visibleCount < totalCount ? totalCount : visibleCount) === 1 ? '' : 's'}`
+  const totalCount = page === 'sources' ? sources.size : page === 'feeds' ? feedEntries.length : posts.length
+  const [singular, plural] = page === 'sources' ? ['feed', 'feeds'] : page === 'feeds' ? ['entry', 'entries'] : ['post', 'posts']
+  const countText = `${visibleCount}${visibleCount < totalCount ? ` of ${totalCount}` : ''} ${totalCount === 1 ? singular : plural}`
   const descriptions: Record<Page, string> = {
-    posts: 'Browse Markdown from the selected repository.',
-    preview: 'Review repository posts and manage the mndsite feed.',
-    feeds: 'Read new entries from the RSS and Atom feeds this repository subscribes to.',
-    sources: 'See subscribed feeds and publishers represented in repository posts.',
+    posts: 'Browse Markdown from the host site’s repository.',
+    preview: 'Preview the host site’s posts and edit its mndsite feed settings.',
+    feeds: 'Read entries from the RSS and Atom feeds you subscribe to.',
+    sources: 'Manage subscriptions to RSS and Atom feeds, including the host site’s published RSS feed.',
   }
   const active = navigation.find(item => item.id === page)!
   const searchLabel = `Search ${active.title.toLowerCase()}`
 
-  function preparePublication(entry: FeedEntry) {
-    if (!snapshot) return
+  function preparePublication(entry: FeedEntry, fromSiteFeed = false) {
+    if (!data) return
     try {
       setError('')
-      setPendingPublication({ entry, destination: publicationPath(snapshot, entry) })
+      if (!entry.path.startsWith('drafts/') && (fromSiteFeed || entry.draft)) {
+        const path = 'mndsite.yaml'
+        const before = data.snapshot.configs[path]
+        const after = updatePostDraft(before, entry.path, !entry.draft)
+        if (after === undefined || after === before) throw new Error('Refresh the workspace and try the publication change again.')
+        setConfigEditor({ path, before, repo: data.repo, preview: { path, before, after } })
+      } else {
+        setPendingPublication({ entry, destination: publicationPath(data.snapshot, entry) })
+      }
     } catch (failure) { setError(message(failure)) }
   }
 
@@ -334,33 +360,40 @@ export function App() {
     const id = nextSubscriptionId.current--
     editSubscriptions([...subscriptions, { id, name: '', url: '' }])
     setSearch('')
-    if (sourceFilter === 'posts') setSourceFilter('subscriptions')
-    setExpandedSource(`\0${id}`)
+    setSourceFilter('')
+    setFormatFilter('')
+    setExpandedSource(`draft:${id}`)
   }
 
-  function toggleSubscription(key: string, source: SourceSummary) {
+  function toggleSubscription(source: FeedSource) {
     if (source.subscriptions.length > 0) {
       const ids = new Set(source.subscriptions.map(feed => feed.id))
-      editSubscriptions(subscriptions.filter(feed => !ids.has(feed.id)), [...removedSubscriptions, ...source.subscriptions])
+      const removed = source.subscriptions.filter(feed => feed.originalIndex !== undefined)
+      editSubscriptions(subscriptions.filter(feed => !ids.has(feed.id)), [...removedSubscriptions, ...removed])
     } else if (source.removed.length > 0) {
       const ids = new Set(source.removed.map(feed => feed.id))
       editSubscriptions([...subscriptions, ...source.removed], removedSubscriptions.filter(feed => !ids.has(feed.id)))
-    } else {
-      const feeds = [...source.knownFeeds.keys()].map(url => ({ id: nextSubscriptionId.current--, sourceKey: key, name: source.name, url }))
-      editSubscriptions([...subscriptions, ...feeds])
-      setExpandedSource(key)
+      if (sourceFilter === 'unsubscribed') setSourceFilter('')
+    } else if (source.url && source.candidate) {
+      const id = nextSubscriptionId.current--
+      editSubscriptions([...subscriptions, { id, name: source.candidate.name, url: source.url }])
+      if (sourceFilter === 'unsubscribed') setSourceFilter('')
+      setExpandedSource(`draft:${id}`)
     }
   }
 
-  function reviewSubscriptions() {
-    if (!data || !subscriptionsChanged) return
+  function subscriptionChange(): ConfigChange {
+    if (before !== feedYaml) throw new Error('feeds.yaml changed since you started editing. Discard these changes to load the latest version.')
+    const after = updateSubscriptions(before, subscriptions)
+    if (after === before) throw new Error('Make a change before reviewing the YAML.')
+    return { path: 'feeds.yaml', before, after }
+  }
+
+  function openSourceSettings(review = false) {
+    if (!data) return
     setError('')
     try {
-      if (before !== feedYaml) throw new Error('feeds.yaml changed since you started editing. Discard these changes to load the latest version.')
-      const path = 'feeds.yaml'
-      const after = updateSubscriptions(before, subscriptions)
-      if (after === before) throw new Error('Make a change before reviewing the YAML.')
-      setConfigEditor({ path, before, repo: data.repo, preview: { path, before, after } })
+      setConfigEditor({ path: 'feeds.yaml', before: feedYaml, repo: data.repo, preview: review ? subscriptionChange() : undefined })
     } catch (failure) { setError(message(failure)) }
   }
 
@@ -390,8 +423,8 @@ export function App() {
               event.currentTarget.value = ''
             }} />
             <button className="icon-button" aria-label="Open GitHub" title="Open GitHub" onClick={() => setRemoteForm(!remoteForm)} aria-expanded={remoteForm}><Github size={17} aria-hidden="true" /></button>
-            {page === 'feeds' && <button className="icon-button" aria-label="Refresh feeds" title="Refresh feeds"
-              disabled={loadingFeeds || !snapshot?.subscriptions.length} onClick={() => void refreshFeeds()}><RefreshCw size={17} aria-hidden="true" /></button>}
+            {(page === 'feeds' || page === 'sources') && <button className="icon-button" aria-label="Refresh feeds" title="Refresh feeds"
+              disabled={loadingFeeds || !readerSubscriptions.length} onClick={() => void refreshFeeds()}><RefreshCw size={17} aria-hidden="true" /></button>}
             <button className="icon-button" aria-label={dark ? 'Light theme' : 'Dark theme'} onClick={() => setDark(!dark)}>{dark ? <Sun size={17} /> : <Moon size={17} />}</button>
           </div>
         </div>
@@ -403,7 +436,7 @@ export function App() {
             <strong>{snapshot?.title || 'Repository'}</strong>
             <span>{data?.repo.label}{data?.repo.revision && ` · ${data.repo.revision.slice(0, 8)}`}</span>
           </div>
-          <nav aria-label="Repository views">
+          <nav aria-label="Trendly views">
             {navigation.map(({ id, title, icon: Icon }) => <Fragment key={id}>
               <button aria-current={page === id ? 'page' : undefined} onClick={() => navigate(id)}>
                 <Icon size={17} aria-hidden="true" /> {title}
@@ -429,22 +462,29 @@ export function App() {
           </form>}
           <div className="page-heading">
             <div className="breadcrumb">{snapshot?.title || 'Repository'} <span aria-hidden="true">/</span> {active.title}</div>
-            <div className="page-heading-row">
-              <h1>{active.title}</h1>
-              {page === 'preview' && <button className="button" disabled={busy || !data} onClick={() => {
+            <h1>{active.title}</h1>
+            <p>{page === 'posts' && snapshot?.description ? snapshot.description : descriptions[page]}</p>
+          </div>
+          {(page === 'preview' || page === 'sources') && <div className="settings-actions">
+            {page === 'preview' ? <>
+              <button className="button" disabled={busy || !data} onClick={() => {
                 if (data) setConfigEditor({ path: 'mndsite.yaml', before: data.snapshot.configs['mndsite.yaml'], repo: data.repo })
-              }}><Settings size={15} aria-hidden="true" /> Feed settings</button>}
-              {page === 'sources' && <div className="page-heading-actions">
-                {subscriptionsChanged && <button className="button" onClick={() => {
+              }}><Settings size={15} aria-hidden="true" /> Feed settings</button>
+              {snapshot?.rss && <a className="button" href={snapshot.rss} target="_blank" rel="noreferrer"><Rss size={15} aria-hidden="true" /> Published RSS</a>}
+            </> : <>
+              <button className="button" disabled={busy || !data} onClick={() => openSourceSettings()}>
+                <Settings size={15} aria-hidden="true" /> Source settings
+              </button>
+              {subscriptionsChanged && <>
+                <button className="button primary" disabled={busy} onClick={() => openSourceSettings(true)}>Review subscription changes</button>
+                <button className="button" disabled={busy} onClick={() => {
                   setSubscriptionEdits(undefined)
                   setExpandedSource('')
                   setError('')
-                }}>Discard changes</button>}
-                <button className="button primary" disabled={busy || !subscriptionsChanged} onClick={reviewSubscriptions}>Review YAML</button>
-              </div>}
-            </div>
-            <p>{page === 'posts' && snapshot?.description ? snapshot.description : descriptions[page]}</p>
-          </div>
+                }}>Discard changes</button>
+              </>}
+            </>}
+          </div>}
           {error && <div className="notice" role="alert"><CircleHelp size={18} />{error}</div>}
           {repositoryPage && publicationCommit && <p className="notice" role="status">
             Committed to GitHub. <a href={publicationCommit.url} target="_blank" rel="noreferrer">View commit {publicationCommit.oid.slice(0, 8)}</a>
@@ -470,18 +510,21 @@ export function App() {
                 <option value="newest">Newest first</option><option value="oldest">Oldest first</option>
               </select>
             </>}
-            {page === 'preview' && snapshot?.rss && <a className="button" href={snapshot.rss} target="_blank" rel="noreferrer"><Rss size={15} /> RSS</a>}
             {page === 'sources' && <>
-              <select aria-label="Filter by source type" value={sourceFilter} onChange={event => setSourceFilter(event.target.value)}>
-                <option value="">All sources</option><option value="subscriptions">Subscriptions</option><option value="posts">Post sources</option>
+              <select aria-label="Filter by subscription status" value={sourceFilter} onChange={event => setSourceFilter(event.target.value)}>
+                <option value="">All feeds</option><option value="subscribed">Subscribed</option><option value="unsubscribed">Unsubscribed</option>
               </select>
-              <select aria-label="Sort sources" value={sourceOrder} onChange={event => setSourceOrder(event.target.value)}>
-                <option value="name">Name A–Z</option><option value="published">Most published posts</option>
+              <select aria-label="Filter by feed format" value={formatFilter} onChange={event => setFormatFilter(event.target.value)}>
+                <option value="">All formats</option>
+                {Object.entries(feedFormatLabels).map(([format, label]) => <option key={format} value={format}>{label}</option>)}
+              </select>
+              <select aria-label="Sort feeds" value={sourceOrder} onChange={event => setSourceOrder(event.target.value)}>
+                <option value="name">Name A–Z</option><option value="entries">Most feed entries</option>
               </select>
             </>}
             <div className="controls-end">
               {page !== 'feeds' && data && data.repo.label !== 'Example repository' &&
-                <button className="button" disabled={busy} onClick={() => void reload()}><RefreshCw size={15} /> Refresh</button>}
+                <button className="button" disabled={busy} onClick={() => void reload()}><RefreshCw size={15} aria-hidden="true" /> {page === 'sources' ? 'Reload workspace' : 'Refresh'}</button>}
               <span className="count" role="status">{countText}</span>
             </div>
           </div>
@@ -491,7 +534,13 @@ export function App() {
             <Feed entries={listedPosts} key={`${page}-${data.repo.label}-${page === 'posts' ? linkedPost || '' : ''}`}
               initialExpanded={page === 'posts' ? linkedPost : undefined} defaultSource={data.snapshot.title}
               resolveImage={(value, entry) => repoAsset(data.repo, value, entry)}
-              renderAction={data.repo.publication ? entry =>
+              publicationControls={page === 'preview'}
+              renderAction={page === 'preview' ? entry =>
+                <button className="button state-toggle" type="button" role="switch" aria-checked={!entry.draft}
+                  aria-label={`${entry.title} publication`} disabled={busy || (entry.path.startsWith('drafts/') && !data.repo.publication)}
+                  title={entry.draft ? 'Publish' : 'Unpublish'}
+                  onClick={() => preparePublication(entry, true)}>{entry.draft ? 'Unpublished' : 'Published'}</button>
+              : data.repo.publication ? entry =>
                 <button className="button post-action" disabled={busy} onClick={() => preparePublication(entry)}
                   title={entry.draft ? 'Publish' : 'Unpublish'} aria-label={`${entry.draft ? 'Publish' : 'Unpublish'} ${entry.title}`}>
                   {entry.draft ? <ArrowUpToLine size={15} aria-hidden="true" /> : <ArrowDownToLine size={15} aria-hidden="true" />}
@@ -499,71 +548,64 @@ export function App() {
                 </button> : undefined} />
           )}
           {posts.length > 0 && listedPosts?.length === 0 && <p className="activity">No posts match these filters.</p>}
-          {repositoryPage && data && !data.repo.publication && <p className="activity">Open a GitHub branch to publish or unpublish posts.</p>}
           {page === 'sources' && <>
-            {listedSources.length > 0 && <div className="mnd-feed source-list">{listedSources.map(([key, source]) => {
-              const results = source.feeds.map(url => feedByUrl.get(url))
-              const loaded = results.reduce((count, feed) => count + (feed?.entries.length || 0), 0)
-              const unavailable = results.filter(feed => feed?.error).length
+            {listedSources.length > 0 && <div className="mnd-feed source-list state-card-list">{listedSources.map(source => {
+              const { key, url, format, result, name, entryCount } = source
               const subscribed = source.subscriptions.length > 0
-              const feedSource = subscribed || source.removed.length > 0 || source.knownFeeds.size > 0
-              const formats = new Set(source.knownFeeds.values())
-              for (const feed of [...source.subscriptions, ...source.removed]) {
-                const url = website(feed.url)
-                const format = (url && feedByUrl.get(url)?.format) || feedFormatHint(feed.url)
-                if (format) formats.add(format)
-              }
-              const feedTags = formats.size ? [...formats].sort() : ['feed']
-              const action = subscribed ? 'Unsubscribe' : 'Subscribe'
-              const open = expandedSource === key
-              return <div className={feedSource ? 'mnd-feed-row' : undefined} key={key} data-subscribed={feedSource ? subscribed : undefined}>
-                <FeedCard title={source.name} open={open}
-                toggle={() => setExpandedSource(current => current === key ? '' : key)}
-                tags={feedSource && <span className="mnd-feed-tags">
-                  {feedTags.map(format => <span className="mnd-feed-facet" key={format}>{format}</span>)}
+              let statusText = ''
+              if (subscribed) {
+                if (entryCount !== undefined) statusText = `${entryCount} ${entryCount === 1 ? 'feed entry' : 'feed entries'}`
+                else if (result?.error) statusText = 'Feed unavailable'
+                else statusText = url ? 'Loading…' : 'Enter a feed URL'
+              } else if (source.removed.length > 0) statusText = 'Removal staged'
+              const open = expandedSource === key || source.subscriptions.some(feed => expandedSource === `draft:${feed.id}`)
+              return <div className="mnd-feed-row" key={key} data-subscribed={subscribed}>
+                <FeedCard title={name} open={open}
+                toggle={() => setExpandedSource(open ? '' : key)}
+                tags={format && <span className="mnd-feed-tags">
+                  <span className="mnd-feed-facet">{feedFormatLabels[format]}</span>
                 </span>}
                 meta={<>
-                  <span className="mnd-feed-publication">{source.published.size} {source.published.size === 1 ? 'post' : 'posts'}</span>
-                  {source.feeds.length > 0 && <span className="mnd-feed-meta-item">{results.every(Boolean) ? `${loaded} ${loaded === 1 ? 'item' : 'items'}` : 'Loading…'}{unavailable > 0 && ` · ${unavailable} unavailable`}</span>}
-                  {!subscribed && source.removed.length > 0 && <span className="mnd-feed-meta-item">Removal staged</span>}
+                  {url && <span className="source-feed-url">{url}</span>}
+                  {statusText && <span className="mnd-feed-meta-item">{statusText}</span>}
                 </>}>
                   {open && subscribed && <div className="subscription-editor">
                     {source.subscriptions.map((feed, index) => <fieldset key={feed.id} disabled={busy}>
                       <legend>{source.subscriptions.length > 1 ? `Subscription ${index + 1}` : 'Subscription'}</legend>
-                      <label>Name<input value={feed.name} placeholder="Feed name" autoFocus={feed.id < 0 && !feed.sourceKey} onChange={event =>
+                      <label>Name<input value={feed.name} placeholder="Feed name" autoFocus={feed.id < 0 && !feed.url} onChange={event =>
                         editSubscriptions(subscriptions.map(item => item.id === feed.id ? { ...item, name: event.target.value } : item))} /></label>
-                      <label>Feed URL<input value={feed.url} placeholder="https://example.com/rss.xml" autoFocus={index === 0 && feed.id < 0 && !!feed.sourceKey} onChange={event =>
+                      <label>Feed URL<input value={feed.url} placeholder="https://example.com/rss.xml" onChange={event =>
                         editSubscriptions(subscriptions.map(item => item.id === feed.id ? { ...item, url: event.target.value } : item))} /></label>
                       <button className="icon-button" type="button" aria-label={`Remove subscription ${index + 1}`} title="Remove subscription"
                         onClick={() => editSubscriptions(subscriptions.filter(item => item.id !== feed.id))}><Trash2 size={16} aria-hidden="true" /></button>
                     </fieldset>)}
                   </div>}
-                  {open && source.posts.size > 0 && <div className="mnd-feed-prose">
-                    <h2>Repository posts</h2>
-                    <ul>{posts.filter(post => source.posts.has(post.id)).map(post => <li key={post.id}>
-                      <a href={`#post=${encodeURIComponent(post.id)}`}>{post.title}</a>
-                    </li>)}</ul>
-                  </div>}
-                  {open && !subscribed && source.posts.size === 0 && <p className="mnd-feed-meta">Review YAML to apply this removal.</p>}
+                  {open && subscribed && result?.error && <p className="notice">{result.error}</p>}
+                  {open && !subscribed && source.removed.length === 0 && url && <p className="mnd-feed-meta">
+                    <a href={url} target="_blank" rel="noreferrer">Open feed</a>
+                  </p>}
                 </FeedCard>
-                {feedSource && <div className="mnd-feed-action">
-                  <button className="button subscription-toggle" type="button" role="switch" aria-checked={subscribed}
-                    disabled={busy} aria-label={`${source.name} subscription`} title={action}
-                    onClick={() => toggleSubscription(key, source)}>{subscribed ? 'Subscribed' : 'Unsubscribed'}</button>
-                </div>}
+                <div className="mnd-feed-action">
+                  <button className="button subscription-toggle state-toggle" type="button" role="switch" aria-checked={subscribed}
+                    disabled={busy} aria-label={`${name} subscription`} title={subscribed ? 'Unsubscribe' : 'Subscribe'}
+                    onClick={() => toggleSubscription(source)}>{subscribed ? 'Subscribed' : 'Unsubscribed'}</button>
+                </div>
               </div>
             })}</div>}
-            {availableSources.length === 0 && <p className="activity">This repository has no sources.</p>}
-            {availableSources.length > 0 && listedSources.length === 0 && <p className="activity">No sources match these filters.</p>}
+            {snapshot && sources.size === 0 && <p className="activity">No feeds found. Add a subscription by feed URL.</p>}
+            {sources.size > 0 && listedSources.length === 0 && <p className="activity">No feeds match these filters.</p>}
             <button className="button subscription-add" type="button" disabled={busy || !data} onClick={addSubscription}>
               <Plus size={16} aria-hidden="true" /> Add subscriptions
             </button>
           </>}
           {page === 'feeds' && <>
+            {subscriptionsChanged && <p className="notice">Previewing unsaved subscription changes. <button className="button" onClick={() => navigate('sources')}>Sources</button></p>}
             {loadingFeeds && <p className="activity" role="status">Loading feeds…</p>}
-            {snapshot?.subscriptions.length === 0 && <p className="activity">No subscriptions defined in feeds.yaml.</p>}
-            {feedResults?.filter(feed => feed.error && (!activeFeed || feed.url === activeFeed)).map(feed =>
-              <p className="notice" key={feed.url}>{feed.name} could not be loaded. {feed.error}</p>)}
+            {snapshot && readerSubscriptions.length === 0 && <p className="activity">No feed subscriptions.</p>}
+            {visibleFeeds.map(feed => {
+              const failure = feedByUrl.get(feed.url)?.error
+              return failure && <p className="notice" key={feed.url}>{feed.name} could not be loaded. {failure}</p>
+            })}
             <Feed entries={activity} />
             {feedEntries.length > 0 && activity.length === 0 && <p className="activity">No entries match these filters.</p>}
           </>}
@@ -577,11 +619,14 @@ export function App() {
           setPublicationCommit(commit)
           if (data.repo.refresh) void load(data.repo.refresh, false)
         }} />}
-      {configEditor && <ConfigDialog {...configEditor} onClose={() => setConfigEditor(undefined)} onWrite={commit => {
+      {configEditor && <ConfigDialog {...configEditor}
+        subscriptionChange={configEditor.path === 'feeds.yaml' && subscriptionsChanged ? subscriptionChange : undefined}
+        onClose={() => setConfigEditor(undefined)} onWrite={commit => {
         setConfigSaved({ path: configEditor.path, commit })
-        if (configEditor.path === 'feeds.yaml') setSubscriptionEdits(undefined)
         setConfigEditor(undefined)
-        if (configEditor.repo.refresh) void load(configEditor.repo.refresh, false)
+        if (configEditor.repo.refresh) void load(configEditor.repo.refresh, false).then(loaded => {
+          if (loaded && configEditor.path === 'feeds.yaml') setSubscriptionEdits(undefined)
+        })
       }} />}
     </div>
   )

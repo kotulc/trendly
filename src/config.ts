@@ -1,8 +1,8 @@
 import { isMap, isSeq, parseDocument } from 'yaml'
-import { website } from './repository'
+import { isDraftPath, website } from './repository'
 
 type FeedSettings = { section: string; expandable: boolean; siteUrl: string }
-export type SubscriptionDraft = { id: number; originalIndex?: number; sourceKey?: string; name: string; url: string }
+export type SubscriptionDraft = { id: number; originalIndex?: number; name: string; url: string }
 
 function readYaml(contents?: string) {
   const doc = parseDocument(contents ?? '')
@@ -52,6 +52,23 @@ export function updateFeedSettings(contents: string | undefined, values: FeedSet
       if (isMap(rss) && rss.items.length > 1) throw new Error('Remove the RSS block in YAML directly to review its extra settings.')
       doc.delete('rss')
     }
+  }
+  return serialize(doc, contents)
+}
+
+export function updatePostDraft(contents: string | undefined, path: string, draft: boolean) {
+  if (!isDraftPath(path)) throw new Error('Choose a repository-relative Markdown path.')
+  const doc = readYaml(contents)
+  const paths = doc.get('drafts', true)
+  if (isSeq(paths)) {
+    const current = paths.toJSON() as string[]
+    if (current.includes(path) === draft) return contents
+    if (draft) paths.add(path)
+    else paths.items = paths.items.filter((_, index) => current[index] !== path)
+  } else if (doc.get('drafts') == null && draft) {
+    doc.set('drafts', [path])
+  } else {
+    return contents
   }
   return serialize(doc, contents)
 }

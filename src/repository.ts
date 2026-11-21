@@ -62,6 +62,17 @@ export function website(data: unknown) {
   } catch { /* A source needs an absolute URL. */ }
 }
 
+export function normalizeSubscriptions(entries: unknown[]): Subscription[] {
+  const seen = new Set<string>()
+  return entries.flatMap(entry => {
+    const feed = object(entry)
+    const url = website(feed.url)
+    if (!url || seen.has(url)) return []
+    seen.add(url)
+    return [{ url, name: text(feed.name) || new URL(url).hostname }]
+  })
+}
+
 function normalize(path: string) {
   const parts: string[] = []
   for (const piece of path.split('/')) {
@@ -98,7 +109,7 @@ function post_source(value: unknown): FeedSource[] {
   return url ? [{
     url, title: text(data.title), kind: text(data.kind), publisher: text(data.publisher),
     description: text(data.description), image_url: website(data.image_url), audio_url: website(data.audio_url),
-    placement: text(data.placement),
+    video_url: website(data.video_url), placement: text(data.placement),
   }] : []
 }
 
@@ -136,6 +147,10 @@ function post_path(path: string, root: string) {
     !path.split('/').some(part => /^(\.|_assets$|images$)/.test(part))
 }
 
+export function isDraftPath(path: unknown): path is string {
+  return typeof path === 'string' && !/[\\:\0]/.test(path) && normalize(path) === path && markdown.test(path)
+}
+
 async function parallel<T>(items: string[], callback: (path: string) => Promise<T>) {
   const results: T[] = []
   for (let index = 0; index < items.length; index += 10) {
@@ -152,11 +167,17 @@ export async function loadRepository(repo: Repository): Promise<Snapshot> {
   const content = normalize(text(config.content) || 'docs')
   if (content === undefined) throw new Error('The published content directory must be inside the repository.')
   const draftRoot = 'drafts'
+  const draftPaths = config.drafts ?? []
+  if (!Array.isArray(draftPaths) || !draftPaths.every(isDraftPath)) {
+    throw new Error('mndsite.yaml: drafts must be a list of repository-relative Markdown paths.')
+  }
+  const configuredDrafts = new Set(draftPaths)
   const files = paths.filter(path => post_path(path, content) && !within(path, draftRoot) ||
     post_path(path, draftRoot))
   const posts = await parallel(files, async path => {
-    const draft = within(path, draftRoot)
-    try { return post(await repo.read(path), path, draft ? draftRoot : content, draft, config, repo) }
+    const outsideContent = within(path, draftRoot)
+    try { return post(await repo.read(path), path, outsideContent ? draftRoot : content,
+      outsideContent || configuredDrafts.has(path), config, repo) }
     catch (error) { throw new Error(`${path}: ${error instanceof Error ? error.message : 'Unable to read post'}`) }
   })
   posts.sort((a, b) => (b.date || '').localeCompare(a.date || '') || a.route.localeCompare(b.route) || a.id.localeCompare(b.id))
@@ -164,14 +185,7 @@ export async function loadRepository(repo: Repository): Promise<Snapshot> {
   const subscriptionsConfig = feedsYaml === undefined ? [] : yaml(feedsYaml)
   const settings = object(subscriptionsConfig)
   const supplied = Array.isArray(subscriptionsConfig) ? subscriptionsConfig : Array.isArray(settings.feeds) ? settings.feeds : []
-  const seen = new Set<string>()
-  const subscriptions = supplied.flatMap((item: unknown) => {
-    const feed = object(item)
-    const url = website(feed.url)
-    if (!url || seen.has(url)) return []
-    seen.add(url)
-    return [{ url, name: text(feed.name) || new URL(url).hostname }]
-  })
+  const subscriptions = normalizeSubscriptions(supplied)
   const base = website(object(config.rss).site_url)
   return {
     title: text(config.title) || repo.label, description: text(config.description) === 'none' ? '' : text(config.description),
@@ -226,7 +240,7 @@ function localRepository(files: Map<string, File>, label: string, refresh?: Repo
     },
     asset(path) {
       const file = files.get(path)
-      if (!file || !/\.(?:jpe?g|png|webp|gif|svg|avif|ico|bmp)$/i.test(path)) return
+      if (!file || !/\.(?:jpe?g|png|webp|gif|svg|avif|ico|bmp|mp4|m4v|webm|ogv|mov|mp3|m4a|aac|oga|ogg|opus|wav|flac)$/i.test(path)) return
       const url = blobs.get(path) || URL.createObjectURL(file)
       blobs.set(path, url)
       return url
@@ -372,7 +386,7 @@ export async function remoteRepository(input: string, ref: string): Promise<Repo
 }
 
 export function exampleRepository(): Repository {
-  const assets = Object.fromEntries(Object.entries(import.meta.glob('../example-workspace/**/*.{jpg,jpeg,png,webp,svg}', {
+  const assets = Object.fromEntries(Object.entries(import.meta.glob('../example-workspace/**/*.{jpg,jpeg,png,webp,svg,mp4,m4v,webm,ogv,mov,mp3,m4a,aac,oga,ogg,opus,wav,flac}', {
     eager: true, query: '?url', import: 'default',
   })).map(([path, url]) => [path.replace('../example-workspace/', ''), url as string]))
   const files = Object.fromEntries(Object.entries(import.meta.glob('../example-workspace/**/*.{yaml,md}', { eager: true, query: '?raw', import: 'default' }))

@@ -18,16 +18,18 @@ function diff(before: string | undefined, after: string) {
   ]
 }
 
-export function ConfigDialog({ path, before, repo, preview, onClose, onWrite }: {
+export function ConfigDialog({ path, before, repo, preview, subscriptionChange, onClose, onWrite }: {
   path: ConfigFile
   before?: string
   repo: Repository
   preview?: ConfigChange
+  subscriptionChange?: () => ConfigChange
   onClose: () => void
   onWrite: (commit?: Commit) => void
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
-  const [settings, setSettings] = useState(() => feedSettings(preview ? undefined : before))
+  const sourceSettings = path === 'feeds.yaml'
+  const [settings, setSettings] = useState(() => feedSettings(sourceSettings || preview ? undefined : before))
   const [change, setChange] = useState(preview)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -39,6 +41,10 @@ export function ConfigDialog({ path, before, repo, preview, onClose, onWrite }: 
     event.preventDefault()
     setError('')
     try {
+      if (sourceSettings) {
+        if (subscriptionChange) setChange(subscriptionChange())
+        return
+      }
       if (JSON.stringify(settings) === JSON.stringify(feedSettings(before))) throw new Error('Make a change before reviewing the YAML.')
       const after = updateFeedSettings(before, settings)
       if (after === before) throw new Error('Make a change before reviewing the YAML.')
@@ -92,12 +98,23 @@ export function ConfigDialog({ path, before, repo, preview, onClose, onWrite }: 
       {error && <p role="alert">{error}</p>}
       <div className="publication-buttons">
         <button className="button" type="button" disabled={saving} onClick={() => {
-          if (preview) onClose()
-          else { setChange(undefined); setError('') }
-        }}>Back to editing</button>
+          if (preview) { onClose(); return }
+          setChange(undefined)
+          setError('')
+        }}>{preview ? 'Cancel' : sourceSettings ? 'Back to settings' : 'Back to editing'}</button>
         {canWrite ? <button className="button primary" type="submit" disabled={saving}>
           {saving ? 'Writing…' : 'Write to repository'}
         </button> : <button className="button primary" type="button" onClick={download}>Download YAML</button>}
+      </div>
+    </form> : sourceSettings ? <form key="sources" onSubmit={stage}>
+      <h2 id="config-title">Source settings</h2>
+      {before === undefined ? <p>This workspace has no feeds.yaml file yet.</p>
+        : before.trim() ? <pre className="yaml-diff" aria-label="Saved feeds.yaml" tabIndex={0}>{before}</pre>
+          : <p>The saved feeds.yaml file is empty.</p>}
+      {error && <p role="alert">{error}</p>}
+      <div className="publication-buttons">
+        <button className="button" type="button" onClick={onClose}>Close</button>
+        {subscriptionChange && <button className="button primary" type="submit">Review YAML</button>}
       </div>
     </form> : <form key="edit" onSubmit={stage}>
       <h2 id="config-title">Feed settings</h2>

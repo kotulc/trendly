@@ -6,6 +6,7 @@ export type FeedSource = {
   description?: string
   image_url?: string
   audio_url?: string
+  video_url?: string
   placement?: string
 }
 
@@ -49,4 +50,5 @@ export default function Feed(props: {
   resolveLink?: Resolve
   renderAction?: (entry: FeedEntry) => React.ReactNode
   initialExpanded?: string
+  publicationControls?: boolean
 }): React.JSX.Element

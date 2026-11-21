@@ -3,6 +3,7 @@ import { entryMediaType, type FeedEntry, type FeedSource } from './feed/Feed'
 import { normalize_tags } from './feed/card-meta.mjs'
 
 const mediaNamespace = 'http://search.yahoo.com/mrss/'
+const itunesNamespace = 'http://www.itunes.com/dtds/podcast-1.0.dtd'
 
 export type FeedFormat = 'rss' | 'atom'
 
@@ -57,26 +58,30 @@ function feedUrl(value: string | null | undefined, base: string) {
 }
 
 function entrySource(entry: Element, feed: Subscription, href?: string): FeedSource | undefined {
-  const enclosures = [...entry.children, ...entry.getElementsByTagNameNS(mediaNamespace, 'content')]
-    .filter(node => node.localName === 'enclosure' || node.getAttribute('rel') === 'enclosure' ||
-      (node.localName === 'content' && node.namespaceURI === mediaNamespace))
+  const enclosures = [...Array.from(entry.children).filter(node => node.localName === 'enclosure' || node.getAttribute('rel') === 'enclosure'),
+    ...entry.getElementsByTagNameNS(mediaNamespace, 'content')]
     .flatMap(node => {
       const url = feedUrl(node.getAttribute('url') || node.getAttribute('href'), feed.url)
       if (!url) return []
       const medium = (node.getAttribute('type')?.split('/')[0] || node.getAttribute('medium'))?.toLowerCase()
-      const kind = entryMediaType({ sources: [{ url, kind: medium }] })
+      const kind = medium === 'audio' || medium === 'video' || medium === 'image' ? medium : entryMediaType({ sources: [{ url }] })
       return [{ url, kind }]
     })
-  const media = enclosures.find(item => item.kind === 'audio' || item.kind === 'video') ||
-    enclosures.find(item => item.kind === 'image')
-  const url = href || media?.url
+  const video = enclosures.find(item => item.kind === 'video')?.url
+  const audio = enclosures.find(item => item.kind === 'audio')?.url
+  const thumbnail = entry.getElementsByTagNameNS(mediaNamespace, 'thumbnail')[0]
+  const artwork = entry.getElementsByTagNameNS(itunesNamespace, 'image')[0]
+  const image = enclosures.find(item => item.kind === 'image')?.url ||
+    feedUrl(thumbnail?.getAttribute('url') || artwork?.getAttribute('href'), feed.url)
+  const url = href || video || audio || image
   if (!url) return undefined
   const linkedKind = entryMediaType({ sources: [{ url }] })
   return {
     url, title: href ? 'Original entry' : 'Media file', publisher: feed.name,
-    kind: linkedKind !== 'link' ? linkedKind : media?.kind || 'article',
-    audio_url: media?.kind === 'audio' ? media.url : linkedKind === 'audio' ? url : undefined,
-    image_url: media?.kind === 'image' ? media.url : undefined,
+    kind: video ? 'video' : audio ? 'audio' : linkedKind !== 'link' ? linkedKind : image ? 'image' : 'article',
+    video_url: video,
+    audio_url: audio,
+    image_url: image,
   }
 }
 
@@ -89,7 +94,12 @@ export async function fetchFeed(feed: Subscription, proxy?: string): Promise<{ f
   let raw: string
   try { raw = await request(feed.url) }
   catch (error) {
-    if (!proxy) throw error
+    if (!proxy) {
+      if (error instanceof TypeError) {
+        throw new Error('The browser request failed. If the publisher blocks cross-origin requests, use a trusted proxy_url in feeds.yaml.')
+      }
+      throw error
+    }
     const url = new URL(proxy)
     url.searchParams.set('url', feed.url)
     raw = await request(url.href)
