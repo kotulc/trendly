@@ -13,8 +13,10 @@ export type FeedEntry = {
   id: string
   title: string
   date?: string
+  timestamp?: number
   summary: string
   body: string
+  externalContent?: { html?: string; base: string }
   path: string
   href?: string
   draft?: boolean
@@ -27,9 +29,24 @@ export type FeedEntry = {
 
 type Resolve = (value: string, entry: FeedEntry) => string | undefined
 
+export function entryMediaType(entry: Pick<FeedEntry, 'sources' | 'cover'>): 'article' | 'audio' | 'video' | 'image' | 'link'
+
+export function FeedCard(props: {
+  title: string
+  meta: React.ReactNode
+  badge?: React.ReactNode
+  tags?: React.ReactNode
+  excerpt?: string
+  open: boolean
+  toggle: () => void
+  children: React.ReactNode
+}): React.JSX.Element
+
 export default function Feed(props: {
   entries: FeedEntry[]
   defaultSource?: string
   resolveImage?: Resolve
   resolveLink?: Resolve
+  renderAction?: (entry: FeedEntry) => React.ReactNode
+  initialExpanded?: string
 }): React.JSX.Element

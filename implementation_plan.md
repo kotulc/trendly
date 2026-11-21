@@ -1,6 +1,6 @@
 # Trendly implementation plan
 
-Build Trendly as a lightweight, read-only repository explorer with a Pages CMS–style interface. Keep Markdown, media, and YAML authoritative in the repository. Use an in-memory model for posts, sources, and external feeds. Editing happens in an external editor or agent, and publishing stays in the repository's existing Git and mndsite workflow.
+Build Trendly as a lightweight repository explorer with a Pages CMS–style interface. Keep Markdown, media, and YAML authoritative in the repository. Use an in-memory model for posts, sources, and external feeds. Editing happens in an external editor or agent. Trendly commits publication changes on a GitHub branch, and the repository's existing Git and mndsite workflow handles deployment.
 
 The initial explorer, standalone mndsite feed and RSS export, and Trendly preview are implemented. The two apps build independently using matching copies of the portable feed view. The checks below describe the release criteria.
 
@@ -27,16 +27,19 @@ The initial explorer, standalone mndsite feed and RSS export, and Trendly previe
 ## 3. Bring the same feed into Trendly's working preview
 
 - Mount the shared feed view inside Trendly. Use working-tree files for local preview and the selected commit for remote browsing. Show which source or revision is open so the user can tell what they are reviewing.
-- Add an explicit local draft location outside the published content and asset inputs. Show drafts in local preview with a visible label. Keep draft bodies and draft-only files out of the generated site and its feed data.
+- Keep drafts outside the published content and asset inputs. List them in Posts and let authors opt into seeing them in Site feed. Keep draft bodies and draft-only files out of the generated site and its feed data.
 - Start with **Refresh** where a browser retains a directory handle. In Firefox, reselect the folder for an updated snapshot. For automatic refresh on file saves, extend mndsite's existing development watcher and dev preview to pick up post, feed configuration, and relevant asset changes. Keep that workflow optional and independent of the static browser app.
 - Give Herder and other agents the repository layout and frontmatter conventions. An author or agent can create, edit, and promote posts through normal file operations and Git. Consider MCP only if a concrete workflow needs a notification beyond refresh or watch.
+- On a GitHub branch, expose Publish and Unpublish as a single commit that moves the Markdown between the draft and content trees. Check the expected branch head before writing and let the existing push workflow deploy the commit.
+- Use the same post filters and counts in Posts and Site feed. Show drafts by default in the working feed. Stage changes to `mndsite.yaml` for review before writing them to a folder or branch.
 
 **Exit check.** Use one repository fixture containing published content and a draft. Compare the published post in both views. Edit the draft with an external tool, refresh or watch it update, then check the public build for the absence of the draft and its assets.
 
 ## 4. Add external feeds and source browsing
 
 - Load RSS and Atom at runtime from `feeds.yaml`. Fetch directly in the browser where allowed. Support an optional operator-configured proxy for feeds that block browser reads. Keep working feeds and repository posts visible if one source fails.
-- Give repository posts and external entries distinct labels and link behaviors in the mixed view. Build a source list from post frontmatter and associate recurring sources with the posts that discuss them.
+- Classify repository posts and external entries with the same media chips. Support date sorting and filtering by media and tags. Group subscriptions and recurring post publishers by name and show separate published and loaded counts.
+- Add, edit, or remove subscriptions in Sources. Review changes to `feeds.yaml` before writing, and reload the subscription data after saving.
 - Start with in-memory results, refresh controls, and error states per feed. Add IndexedDB only if repeat loading or offline reading warrants it.
 
 **Exit check.** Load one directly accessible feed and one feed blocked by CORS. Verify that repository views remain usable and that a configured proxy can retrieve the blocked feed.

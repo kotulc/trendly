@@ -3,6 +3,6 @@
     path { fill: #171717; }
     @media (prefers-color-scheme: dark) { path { fill: #ededed; } }
   </style>
-  <path d="M2 4h2v24h26v2H2z" opacity=".65"/>
-  <path d="M8 20h6v6H8z M16 14h6v12h-6z M24 4h6v22h-6z"/>
+  <path fill-rule="evenodd" d="M2 2H30V30H2Z M3.5 6H28.5V28.5H3.5Z"/>
+  <path d="M7.5 20H12.5V26H7.5Z M13.5 14H18.5V26H13.5Z M19.5 8H24.5V26H19.5Z"/>
 </svg>

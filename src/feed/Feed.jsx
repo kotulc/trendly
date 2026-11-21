@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { createElement, Fragment, useEffect, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { normalize_tags } from './card-meta.mjs'
 
 const media_labels = { article: 'Article', podcast: 'Podcast', youtube: 'YouTube', link: 'Source' }
 const post_icons = {
@@ -11,13 +12,47 @@ const post_icons = {
   link: ['Link', 'M10 14l4-4 M8 16l-1 1a3 3 0 0 1-4-4l4-4a3 3 0 0 1 4 0 M16 8l1-1a3 3 0 0 1 4 4l-4 4a3 3 0 0 1-4 0'],
 }
 
-function web_url(value) {
+const prose_elements = new Set([
+  'p', 'div', 'section', 'blockquote', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'dl', 'dt', 'dd',
+  'strong', 'b', 'em', 'i', 's', 'del', 'u', 'code', 'pre', 'kbd', 'sub', 'sup', 'figure', 'figcaption',
+  'table', 'caption', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td',
+])
+const hidden_elements = new Set(['script', 'style', 'iframe', 'object', 'embed', 'template', 'noscript', 'svg', 'math', 'form'])
+
+function web_url(value, base) {
+  if (!value?.trim()) return null
   try {
-    const url = new URL(value)
+    const url = new URL(value, base)
     return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url : null
   } catch {
     return null
   }
+}
+
+function ExternalContent({ content, text }) {
+  if (!content.html) return <p className="mnd-feed-plain">{text}</p>
+  const template = document.createElement('template')
+  template.innerHTML = content.html
+
+  function render(node, key) {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent
+    if (!(node instanceof Element) || hidden_elements.has(node.localName)) return null
+    const tag = node.localName === 'h1' ? 'h2' : node.localName
+    if (tag === 'img') {
+      const src = web_url(node.getAttribute('src'), content.base)
+      const alt = node.getAttribute('alt') || ''
+      return src ? <img key={key} src={src.href} alt={alt} loading="lazy" referrerPolicy="no-referrer" /> : alt
+    }
+    if (tag === 'br' || tag === 'hr') return createElement(tag, { key })
+    const children = Array.from(node.childNodes, render)
+    if (tag === 'a') {
+      const href = web_url(node.getAttribute('href'), content.base)
+      return href ? <a key={key} href={href.href} target="_blank" rel="noreferrer">{children}</a> : <Fragment key={key}>{children}</Fragment>
+    }
+    return createElement(prose_elements.has(tag) ? tag : Fragment, { key }, children)
+  }
+
+  return Array.from(template.content.childNodes, render)
 }
 
 function youtube_id(url) {
@@ -38,6 +73,11 @@ function post_type(entry, source, url) {
   if (kind === 'article') return 'article'
   if (!url && entry.cover) return 'image'
   return url ? 'link' : 'article'
+}
+
+export function entryMediaType(entry) {
+  const source = entry.sources?.[0]
+  return post_type(entry, source, web_url(source?.url))
 }
 
 function MediaPlayer({ video, audio, title }) {
@@ -61,7 +101,7 @@ function SourceCard({ source }) {
   if (!url) return null
   const video = youtube_id(url)
   const kind = video ? 'youtube' : source.kind
-  const audio = kind === 'podcast' && web_url(source.audio_url)
+  const audio = ['podcast', 'audio'].includes(kind) && web_url(source.audio_url)
   const image = web_url(source.image_url)
   const domain = url.hostname.replace(/^www\./, '')
   const label = Object.hasOwn(media_labels, kind) ? media_labels[kind] : media_labels.link
@@ -90,86 +130,101 @@ function PostLink({ href, title, children }) {
   </span>
 }
 
+function FacetChip({ facet: { label, hue, value } }) {
+  return <span className="mnd-feed-facet" title={`${label}: ${value}`}
+    style={hue === undefined ? undefined : { '--facet-hue': hue }}>{value}</span>
+}
+
+export function FeedCard({ title, meta, tags, badge, excerpt, open, toggle, children }) {
+  return <details className="mnd-feed-entry" open={open}>
+    <summary className="mnd-feed-summary" onClick={event => {
+      event.preventDefault()
+      toggle()
+    }}>
+      <span className="mnd-feed-info">
+        <span className="mnd-feed-title" title={title}>{title}</span>
+        <span className="mnd-feed-meta">{meta}</span>
+      </span>
+      {tags}
+      {badge}
+    </summary>
+    {open && <>
+      {excerpt && <div className="mnd-feed-context"><p className="mnd-feed-excerpt">{excerpt}</p></div>}
+      <div className="mnd-feed-body">{children}</div>
+    </>}
+  </details>
+}
+
 function Post({ entry, open, toggle, default_source, resolve_image, resolve_link }) {
   const first_source = entry.sources?.[0]
   const source_url = web_url(first_source?.url)
   const first_host = source_url?.hostname.replace(/^www\./, '')
   const site = entry.site || entry.origin || first_source?.publisher || first_host || default_source
-  const kind = post_type(entry, first_source, source_url)
+  const kind = entryMediaType(entry)
   const [type_label, icon] = post_icons[kind]
-  const facets = (entry.facets || []).flatMap(facet => facet.values
-    .filter(value => facet.name !== 'status' || !['draft', 'published', 'unpublished'].includes(value.toLowerCase()))
+  const chips = (entry.facets || []).flatMap(facet => normalize_tags(facet.values)
+    .filter(value => (facet.name !== 'status' || !['draft', 'published', 'unpublished'].includes(value)) &&
+      (!entry.draft || value !== 'draft'))
     .map(value => ({ ...facet, value })))
   return (
-    <details className="mnd-feed-entry" open={open}>
-      <summary className="mnd-feed-summary" onClick={event => {
-        event.preventDefault()
-        toggle()
-      }}>
-        <span className="mnd-feed-info">
-          <span className="mnd-feed-title">{entry.title}</span>
-          <span className="mnd-feed-meta">
-            {site && <span className="mnd-feed-site">{site}</span>}
-            {!entry.draft && entry.date
-              ? <time className="mnd-feed-publication" dateTime={entry.date}>Published {entry.date}</time>
-              : <span className="mnd-feed-publication">{entry.draft ? 'Unpublished' : 'Published'}</span>}
-          </span>
-        </span>
-        <span className="mnd-feed-type" data-media={kind}>
+    <FeedCard title={entry.title} excerpt={entry.summary} open={open} toggle={toggle} meta={<>
+      {site && <span className="mnd-feed-site" title={site}>{site}</span>}
+      {!entry.draft && entry.date
+        ? <time className="mnd-feed-publication" dateTime={entry.date}>Published {entry.date}</time>
+        : <span className="mnd-feed-publication">{entry.draft ? 'Unpublished' : 'Published'}</span>}
+    </>} tags={(entry.draft || chips.length > 0) && (
+      <span className="mnd-feed-tags">
+        {entry.draft && <span className="mnd-feed-facet mnd-feed-draft">draft</span>}
+        {chips.map(facet => <FacetChip key={`${facet.name}:${facet.value}`} facet={facet} />)}
+      </span>
+    )} badge={<span className="mnd-feed-type" data-media={kind}>
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
             strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
             <path d={icon} />
           </svg>
           {type_label}
-        </span>
-      </summary>
-      {open && (
-        <>
-          {(entry.summary || facets.length > 0) && (
-            <div className="mnd-feed-context">
-              {entry.summary && <p className="mnd-feed-excerpt">{entry.summary}</p>}
-              {facets.length > 0 && (
-                <div className="mnd-feed-facets">
-                  {facets.map(({ name, label, hue, value }) => (
-                    <span className="mnd-feed-facet" key={`${name}:${value}`}
-                      title={`${label}: ${value}`}
-                      style={hue === undefined ? undefined : { '--facet-hue': hue }}>{value}</span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          <div className="mnd-feed-body">
-            {entry.sources?.length > 0 && (
-              <div className="mnd-feed-sources">
-                {entry.sources.map((source, index) => <SourceCard key={`${source.url}-${index}`} source={source} />)}
-              </div>
-            )}
-            <div className="mnd-feed-prose">
-              <Markdown skipHtml remarkPlugins={[remarkGfm]}
-                urlTransform={(url, key) => web_url(url)?.href ||
-                  (key === 'src' ? resolve_image?.(url, entry) : resolve_link?.(url, entry)) || ''}
-                components={{
-                  a: ({ href, title, children }) => <PostLink href={href} title={title}>{children}</PostLink>,
-                  img: ({ src, alt }) => src ? <img src={src} alt={alt || ''} loading="lazy" referrerPolicy="no-referrer" /> : <span>{alt}</span>,
-                }}>{entry.body}</Markdown>
-            </div>
-            {entry.href && <a className="mnd-feed-permalink" href={entry.href}>Open full post</a>}
-          </div>
-        </>
+    </span>}>
+      {entry.sources?.length > 0 && (
+        <div className="mnd-feed-sources">
+          {entry.sources.map((source, index) => <SourceCard key={`${source.url}-${index}`} source={source} />)}
+        </div>
       )}
-    </details>
+      <div className="mnd-feed-prose">
+        {entry.externalContent ? <ExternalContent content={entry.externalContent} text={entry.body} /> : <Markdown skipHtml remarkPlugins={[remarkGfm]}
+          urlTransform={(url, key) => web_url(url)?.href ||
+            (key === 'src' ? resolve_image?.(url, entry) : resolve_link?.(url, entry)) || ''}
+          components={{
+            a: ({ href, title, children }) => <PostLink href={href} title={title}>{children}</PostLink>,
+            img: ({ src, alt }) => src ? <img src={src} alt={alt || ''} loading="lazy" referrerPolicy="no-referrer" /> : <span>{alt}</span>,
+          }}>{entry.body}</Markdown>}
+      </div>
+      {entry.href && <a className="mnd-feed-permalink" href={entry.href}>Open full post</a>}
+    </FeedCard>
   )
 }
 
-export default function Feed({ entries, defaultSource, resolveImage, resolveLink }) {
-  const [expanded, set_expanded] = useState(null)
+export default function Feed({ entries, defaultSource, resolveImage, resolveLink, renderAction, initialExpanded }) {
+  const [expanded, set_expanded] = useState(initialExpanded ?? null)
+  const feed = useRef(null)
+
+  useEffect(() => {
+    if (!initialExpanded) return
+    const summary = feed.current?.querySelector('.mnd-feed-entry[open] > summary')
+    summary?.focus({ preventScroll: true })
+    summary?.scrollIntoView({ block: 'nearest' })
+  }, [initialExpanded])
+
   return (
-    <div className="mnd-feed">
-      {entries.map(entry => <Post key={entry.id} entry={entry} open={expanded === entry.id}
-        toggle={() => set_expanded(current => current === entry.id ? null : entry.id)}
-        default_source={defaultSource}
-        resolve_image={resolveImage} resolve_link={resolveLink} />)}
+    <div className="mnd-feed" ref={feed}>
+      {entries.map(entry => {
+        const post = <Post key={entry.id} entry={entry} open={expanded === entry.id}
+          toggle={() => set_expanded(current => current === entry.id ? null : entry.id)}
+          default_source={defaultSource} resolve_image={resolveImage} resolve_link={resolveLink} />
+        const action = renderAction?.(entry)
+        return action ? <div className="mnd-feed-row" key={entry.id}>
+          {post}<div className="mnd-feed-action">{action}</div>
+        </div> : post
+      })}
     </div>
   )
 }

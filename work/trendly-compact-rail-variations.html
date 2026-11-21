@@ -1,0 +1,96 @@
+<section id="trendly-compact-rail-board" aria-label="Trendly Compact rail refinements">
+  <style>
+    #trendly-compact-rail-board .samples { display: flex; align-items: center; justify-content: center; gap: 8px; }
+    #trendly-compact-rail-board .sample { display: grid; place-items: center; width: 34px; height: 34px; background: Canvas; color: CanvasText; }
+    #trendly-compact-rail-board .detail .sample { width: 54px; height: 54px; }
+    #trendly-compact-rail-board .sample-light { color-scheme: light; }
+    #trendly-compact-rail-board .sample-dark { color-scheme: dark; }
+    #trendly-compact-rail-board .mark { display: block; position: relative; }
+    #trendly-compact-rail-board .bar { position: absolute; background: currentColor; }
+    #trendly-compact-rail-board .frame { position: absolute; box-sizing: border-box; border-style: solid; border-color: currentColor; }
+    #trendly-compact-rail-board .label { font-weight: 500; }
+    @media (max-width: 480px) {
+      #trendly-compact-rail-board .detail { display: none; }
+    }
+  </style>
+  <table class="table">
+    <caption class="sr-only">Compact rail variations in light and dark, with actual-size and enlarged samples</caption>
+    <thead>
+      <tr>
+        <th scope="col">Mark</th>
+        <th class="text-center" scope="col">Favicon <span class="text-small text-muted">16 px</span></th>
+        <th class="text-center" scope="col">Navbar <span class="text-small text-muted">24 px</span></th>
+        <th class="text-center detail" scope="col">Detail <span class="text-small text-muted">48 px</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr data-mark="compact">
+        <th scope="row" class="label">Compact rail<br><span class="text-small text-muted">Reference</span></th>
+      </tr>
+      <tr data-mark="even">
+        <th scope="row" class="label">Even margins<br><span class="text-small text-muted">Bars closer, more room at the sides</span></th>
+      </tr>
+      <tr data-mark="wide">
+        <th scope="row" class="label">Wide frame<br><span class="text-small text-muted">Extra room at the sides and between bars</span></th>
+      </tr>
+      <tr data-mark="lifted">
+        <th scope="row" class="label">Lifted bars<br><span class="text-small text-muted">More clearance above the bottom edge</span></th>
+      </tr>
+      <tr data-mark="weighted">
+        <th scope="row" class="label">Strong base<br><span class="text-small text-muted">Bottom edge matches the top</span></th>
+      </tr>
+    </tbody>
+  </table>
+</section>
+<script>
+  (() => {
+    const board = document.getElementById('trendly-compact-rail-board');
+    // Positions and sizes use a 32-unit grid. Frame weights are top, side, and bottom.
+    const compact = {
+      frame: [2, 2, 28, 28, 4, 2, 2],
+      bars: [[6, 20, 4, 6], [14, 14, 4, 12], [22, 4, 4, 22]],
+    };
+    const marks = {
+      compact,
+      even: { ...compact, bars: [[8, 20, 4, 6], [14, 14, 4, 12], [20, 4, 4, 22]] },
+      wide: { ...compact, frame: [0, 2, 32, 28, 4, 2, 2] },
+      lifted: { ...compact, bars: [[6, 18, 4, 6], [14, 12, 4, 12], [22, 4, 4, 20]] },
+      weighted: { frame: [0, 2, 32, 28, 4, 2, 4], bars: [[6, 18, 4, 6], [14, 12, 4, 12], [22, 4, 4, 20]] },
+    };
+
+    function rectangle(className, [x, y, width, height]) {
+      const shape = document.createElement('span');
+      shape.className = className;
+      shape.style.left = `${x / 32 * 100}%`;
+      shape.style.top = `${y / 32 * 100}%`;
+      shape.style.width = `${width / 32 * 100}%`;
+      shape.style.height = `${height / 32 * 100}%`;
+      return shape;
+    }
+
+    for (const row of board.querySelectorAll('[data-mark]')) {
+      const { frame, bars } = marks[row.dataset.mark];
+      const [, , , , top, side, bottom] = frame;
+      for (const size of [16, 24, 48]) {
+        const cell = row.insertCell();
+        if (size === 48) cell.className = 'detail';
+        const samples = document.createElement('div');
+        samples.className = 'samples';
+        samples.setAttribute('aria-hidden', 'true');
+        cell.append(samples);
+        for (const theme of ['light', 'dark']) {
+          const sample = document.createElement('span');
+          sample.className = `sample sample-${theme}`;
+          const mark = document.createElement('span');
+          mark.className = 'mark';
+          mark.style.width = mark.style.height = `${size}px`;
+          const outline = rectangle('frame', frame);
+          outline.style.borderWidth = `${top * size / 32}px ${side * size / 32}px ${bottom * size / 32}px`;
+          mark.append(outline, ...bars.map(bar => rectangle('bar', bar)));
+          sample.append(mark);
+          samples.append(sample);
+        }
+      }
+    }
+  })();
+</script>

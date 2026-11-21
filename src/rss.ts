@@ -1,5 +1,18 @@
 import { website, type Subscription } from './repository'
-import type { FeedEntry } from './feed/Feed'
+import { entryMediaType, type FeedEntry, type FeedSource } from './feed/Feed'
+import { normalize_tags } from './feed/card-meta.mjs'
+
+const mediaNamespace = 'http://search.yahoo.com/mrss/'
+
+export type FeedFormat = 'rss' | 'atom'
+
+export function feedFormatHint(url: string, kind?: string): FeedFormat | undefined {
+  const format = kind?.toLowerCase()
+  if (format === 'rss' || format === 'atom') return format
+  const address = website(url)
+  const match = address && new URL(address).pathname.match(/[/.](rss|atom)(?:\.xml)?\/?$/i)
+  return match ? match[1].toLowerCase() as FeedFormat : undefined
+}
 
 function child(node: Element, name: string) {
   return Array.from(node.children).find(element => element.localName === name)
@@ -9,21 +22,67 @@ function value(node: Element, ...names: string[]) {
   return names.map(name => child(node, name)?.textContent?.trim()).find(Boolean) || ''
 }
 
-function plain(markup: string) {
+function textFromMarkup(markup: string) {
   const template = document.createElement('template')
   template.innerHTML = markup
-  for (const node of template.content.querySelectorAll('script, style')) node.remove()
-  return (template.content.textContent || '').replace(/\s+/g, ' ').trim()
+  const hasMarkup = template.content.childElementCount > 0
+  for (const node of template.content.querySelectorAll('script, style, template, iframe, object, noscript')) node.remove()
+  for (const node of template.content.querySelectorAll('p, br, div, li, blockquote, pre, h1, h2, h3, h4, h5, h6, td, th')) {
+    node.before(' ')
+    node.after(' ')
+  }
+  return { text: (template.content.textContent || '').trim(), hasMarkup }
 }
 
-function normalizeDate(input: string) {
-  const date = new Date(input)
-  return Number.isNaN(date.getTime()) ? undefined : date.toISOString().slice(0, 10)
+function plain(markup: string) {
+  return textFromMarkup(markup).text.replace(/\s+/g, ' ')
 }
 
-export async function fetchFeed(feed: Subscription, proxy?: string): Promise<FeedEntry[]> {
+function content(entry: Element, ...names: string[]) {
+  for (const name of names) {
+    const field = Array.from(entry.children).find(element => element.localName === name && element.namespaceURI !== mediaNamespace)
+    if (!field) continue
+    const value = (field.childElementCount ? field.innerHTML : field.textContent || '').trim()
+    if (!value) continue
+    const type = field.getAttribute('type')?.toLowerCase()
+    if (type === 'text' || type === 'text/plain') return { text: value }
+    const { text, hasMarkup } = textFromMarkup(value)
+    return { text: hasMarkup ? text.replace(/\s+/g, ' ') : text, html: hasMarkup ? value : undefined }
+  }
+  return { text: '' }
+}
+
+function feedUrl(value: string | null | undefined, base: string) {
+  try { if (value) return website(new URL(value, base).href) } catch { /* Invalid optional URL. */ }
+}
+
+function entrySource(entry: Element, feed: Subscription, href?: string): FeedSource | undefined {
+  const enclosures = [...entry.children, ...entry.getElementsByTagNameNS(mediaNamespace, 'content')]
+    .filter(node => node.localName === 'enclosure' || node.getAttribute('rel') === 'enclosure' ||
+      (node.localName === 'content' && node.namespaceURI === mediaNamespace))
+    .flatMap(node => {
+      const url = feedUrl(node.getAttribute('url') || node.getAttribute('href'), feed.url)
+      if (!url) return []
+      const medium = (node.getAttribute('type')?.split('/')[0] || node.getAttribute('medium'))?.toLowerCase()
+      const kind = entryMediaType({ sources: [{ url, kind: medium }] })
+      return [{ url, kind }]
+    })
+  const media = enclosures.find(item => item.kind === 'audio' || item.kind === 'video') ||
+    enclosures.find(item => item.kind === 'image')
+  const url = href || media?.url
+  if (!url) return undefined
+  const linkedKind = entryMediaType({ sources: [{ url }] })
+  return {
+    url, title: href ? 'Original entry' : 'Media file', publisher: feed.name,
+    kind: linkedKind !== 'link' ? linkedKind : media?.kind || 'article',
+    audio_url: media?.kind === 'audio' ? media.url : linkedKind === 'audio' ? url : undefined,
+    image_url: media?.kind === 'image' ? media.url : undefined,
+  }
+}
+
+export async function fetchFeed(feed: Subscription, proxy?: string): Promise<{ format: FeedFormat; entries: FeedEntry[] }> {
   async function request(url: string) {
-    const response = await fetch(url, { signal: AbortSignal.timeout(8000), credentials: 'omit' })
+    const response = await fetch(url, { signal: AbortSignal.timeout(8000), credentials: 'omit', cache: 'no-cache' })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     return response.text()
   }
@@ -42,22 +101,29 @@ export async function fetchFeed(feed: Subscription, proxy?: string): Promise<Fee
   }
   const variants = Array.from(root.getElementsByTagNameNS('*', root.localName === 'feed' ? 'entry' : 'item'))
   const ids = new Set<string>()
-  return variants.slice(0, 100).flatMap((entry, index) => {
+  const entries = variants.slice(0, 100).flatMap((entry, index) => {
     const atomLink = Array.from(entry.children).find(element =>
       element.localName === 'link' && ['alternate', null].includes(element.getAttribute('rel')) && element.hasAttribute('href'))
     const link = atomLink?.getAttribute('href') || value(entry, 'link')
-    let href: string | undefined
-    try { if (link) href = website(new URL(link, feed.url).href) } catch { /* Invalid optional item link. */ }
+    const href = feedUrl(link, feed.url)
     const id = `${feed.url}#${value(entry, 'guid', 'id') || href || index}`
     if (ids.has(id)) return []
     ids.add(id)
-    const body = plain(value(entry, 'encoded', 'content', 'description', 'summary'))
-    const summary = plain(value(entry, 'summary', 'description')) || body
+    const article = content(entry, 'encoded', 'content', 'description', 'summary')
+    const summary = (content(entry, 'summary', 'description').text || article.text).replace(/\s+/g, ' ')
+    const parsedDate = Date.parse(value(entry, 'pubDate', 'published', 'updated', 'date'))
+    const timestamp = Number.isNaN(parsedDate) ? undefined : parsedDate
+    const source = entrySource(entry, feed, href)
+    const tags = normalize_tags(Array.from(entry.children).filter(node => node.localName === 'category')
+      .map(node => plain(node.getAttribute('term') || node.textContent || '')))
     return [{
       id, title: value(entry, 'title') || href || 'Untitled entry', path: '', href,
-      date: normalizeDate(value(entry, 'pubDate', 'published', 'updated', 'date')),
-      body, summary: summary.length > 250 ? summary.slice(0, 247) + '…' : summary,
-      sources: href ? [{ url: href, title: 'Original entry', publisher: feed.name }] : [],
+      timestamp, date: timestamp === undefined ? undefined : new Date(timestamp).toISOString().slice(0, 10),
+      body: article.text, externalContent: { html: article.html, base: href || feed.url },
+      summary: summary.length > 250 ? summary.slice(0, 247) + '…' : summary,
+      facets: tags.length ? [{ name: 'tags', label: 'Tag', values: tags }] : [],
+      sources: source ? [source] : [],
     }]
   })
+  return { format: root.localName === 'feed' ? 'atom' : 'rss', entries }
 }

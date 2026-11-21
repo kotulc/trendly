@@ -1,3 +1,9 @@
 feeds:
   - name: 99% Invisible
     url: https://feeds.simplecast.com/BqbsxVfO
+  - name: GitHub Blog
+    url: https://github.blog/feed/
+  - name: NASA Image of the Day
+    url: https://www.nasa.gov/feeds/iotd-feed
+  - name: Blender Videos
+    url: https://video.blender.org/feeds/videos.xml

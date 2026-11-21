@@ -1,0 +1,83 @@
+<section id="trendly-icon-variations" aria-label="Trendly logo comparison">
+  <style>
+    #trendly-icon-variations {
+      --preview-border: color-mix(in srgb, CanvasText 16%, Canvas);
+      display: grid;
+      gap: .85rem;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+    }
+    #trendly-icon-variations h2, #trendly-icon-variations h3 { margin: 0; font-weight: 500; }
+    #trendly-icon-variations .variants {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 213px), 1fr));
+      gap: 1.15rem 1rem;
+    }
+    #trendly-icon-variations .variant { display: grid; gap: .4rem; min-width: 0; }
+    #trendly-icon-variations .samples { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #trendly-icon-variations .sample {
+      display: grid; gap: .55rem; min-width: 0; padding: .62rem .58rem;
+      background: Canvas; color: CanvasText; border: 1px solid var(--preview-border);
+    }
+    #trendly-icon-variations .light { color-scheme: light; border-right: 0; border-radius: .28rem 0 0 .28rem; }
+    #trendly-icon-variations .dark { color-scheme: dark; border-radius: 0 .28rem .28rem 0; }
+    #trendly-icon-variations .sample-label { color: color-mix(in srgb, CanvasText 74%, Canvas); font-size: .75rem; }
+    #trendly-icon-variations .marks { display: flex; align-items: center; gap: .55rem; min-height: 24px; }
+    #trendly-icon-variations .mark { display: inline-block; position: relative; width: 24px; height: 24px; flex: none; }
+    #trendly-icon-variations .small { width: 16px; height: 16px; margin-inline-end: .15rem; }
+    #trendly-icon-variations .mark::before, #trendly-icon-variations .mark::after { content: ""; position: absolute; inset: 0; background: currentColor; }
+    #trendly-icon-variations .mark::before { clip-path: var(--bars); }
+    #trendly-icon-variations .mark::after { clip-path: var(--extra, polygon(0 0, 0 0, 0 0)); opacity: var(--extra-opacity, 1); }
+    #trendly-icon-variations .current {
+      --bars: polygon(25% 62.5%, 43.75% 62.5%, 43.75% 81.25%, 25% 81.25%, 25% 62.5%, 50% 81.25%, 50% 43.75%, 68.75% 43.75%, 68.75% 81.25%, 50% 81.25%, 75% 81.25%, 75% 12.5%, 93.75% 12.5%, 93.75% 81.25%, 75% 81.25%, 50% 81.25%, 25% 62.5%);
+      --extra: polygon(6.25% 12.5%, 12.5% 12.5%, 12.5% 87.5%, 93.75% 87.5%, 93.75% 93.75%, 6.25% 93.75%);
+      --extra-opacity: .65;
+    }
+    #trendly-icon-variations .solid {
+      --bars: polygon(6.25% 62.5%, 31.25% 62.5%, 31.25% 87.5%, 6.25% 87.5%, 6.25% 62.5%, 37.5% 87.5%, 37.5% 43.75%, 62.5% 43.75%, 62.5% 87.5%, 37.5% 87.5%, 68.75% 87.5%, 68.75% 12.5%, 93.75% 12.5%, 93.75% 87.5%, 68.75% 87.5%, 37.5% 87.5%, 6.25% 62.5%);
+    }
+    #trendly-icon-variations .baseline {
+      --bars: polygon(6.25% 62.5%, 31.25% 62.5%, 31.25% 81.25%, 6.25% 81.25%, 6.25% 62.5%, 37.5% 81.25%, 37.5% 43.75%, 62.5% 43.75%, 62.5% 81.25%, 37.5% 81.25%, 68.75% 81.25%, 68.75% 12.5%, 93.75% 12.5%, 93.75% 81.25%, 68.75% 81.25%, 37.5% 81.25%, 6.25% 62.5%);
+      --extra: polygon(6.25% 87.5%, 93.75% 87.5%, 93.75% 93.75%, 6.25% 93.75%);
+    }
+    #trendly-icon-variations .strong-axes {
+      --bars: var(--narrow-bars);
+      --extra: polygon(6.25% 12.5%, 18.75% 12.5%, 18.75% 81.25%, 93.75% 81.25%, 93.75% 93.75%, 6.25% 93.75%);
+      --narrow-bars: polygon(25% 56.25%, 43.75% 56.25%, 43.75% 75%, 25% 75%, 25% 56.25%, 50% 75%, 50% 37.5%, 68.75% 37.5%, 68.75% 75%, 50% 75%, 75% 75%, 75% 12.5%, 93.75% 12.5%, 93.75% 75%, 75% 75%, 50% 75%, 25% 56.25%);
+    }
+    #trendly-icon-variations .stepped {
+      --bars: polygon(6.25% 75%, 31.25% 75%, 31.25% 93.75%, 6.25% 93.75%, 6.25% 75%, 37.5% 75%, 37.5% 43.75%, 62.5% 43.75%, 62.5% 75%, 37.5% 75%, 68.75% 56.25%, 68.75% 6.25%, 93.75% 6.25%, 93.75% 56.25%, 68.75% 56.25%, 37.5% 75%, 6.25% 75%);
+    }
+    #trendly-icon-variations .beveled {
+      --bars: polygon(6.25% 68.75%, 31.25% 56.25%, 31.25% 87.5%, 6.25% 87.5%, 6.25% 68.75%, 37.5% 87.5%, 37.5% 50%, 62.5% 37.5%, 62.5% 87.5%, 37.5% 87.5%, 68.75% 87.5%, 68.75% 25%, 93.75% 12.5%, 93.75% 87.5%, 68.75% 87.5%, 37.5% 87.5%, 6.25% 68.75%);
+    }
+    #trendly-icon-variations .caption { color: var(--muted-foreground, GrayText); font-size: .8125rem; margin: 0; }
+  </style>
+  <h2>Trendly mark variations</h2>
+  <div class="variants">
+    <section class="variant"><h3>Current</h3><div class="samples">
+      <div class="sample light"><span class="sample-label">Light</span><div class="marks"><span class="mark small current" aria-hidden="true"></span><span class="mark current" aria-hidden="true"></span></div></div>
+      <div class="sample dark"><span class="sample-label">Dark</span><div class="marks"><span class="mark small current" aria-hidden="true"></span><span class="mark current" aria-hidden="true"></span></div></div>
+    </div></section>
+    <section class="variant"><h3>Solid bars</h3><div class="samples">
+      <div class="sample light"><span class="sample-label">Light</span><div class="marks"><span class="mark small solid" aria-hidden="true"></span><span class="mark solid" aria-hidden="true"></span></div></div>
+      <div class="sample dark"><span class="sample-label">Dark</span><div class="marks"><span class="mark small solid" aria-hidden="true"></span><span class="mark solid" aria-hidden="true"></span></div></div>
+    </div></section>
+    <section class="variant"><h3>Baseline</h3><div class="samples">
+      <div class="sample light"><span class="sample-label">Light</span><div class="marks"><span class="mark small baseline" aria-hidden="true"></span><span class="mark baseline" aria-hidden="true"></span></div></div>
+      <div class="sample dark"><span class="sample-label">Dark</span><div class="marks"><span class="mark small baseline" aria-hidden="true"></span><span class="mark baseline" aria-hidden="true"></span></div></div>
+    </div></section>
+    <section class="variant"><h3>Strong axes</h3><div class="samples">
+      <div class="sample light"><span class="sample-label">Light</span><div class="marks"><span class="mark small strong-axes" aria-hidden="true"></span><span class="mark strong-axes" aria-hidden="true"></span></div></div>
+      <div class="sample dark"><span class="sample-label">Dark</span><div class="marks"><span class="mark small strong-axes" aria-hidden="true"></span><span class="mark strong-axes" aria-hidden="true"></span></div></div>
+    </div></section>
+    <section class="variant"><h3>Rising steps</h3><div class="samples">
+      <div class="sample light"><span class="sample-label">Light</span><div class="marks"><span class="mark small stepped" aria-hidden="true"></span><span class="mark stepped" aria-hidden="true"></span></div></div>
+      <div class="sample dark"><span class="sample-label">Dark</span><div class="marks"><span class="mark small stepped" aria-hidden="true"></span><span class="mark stepped" aria-hidden="true"></span></div></div>
+    </div></section>
+    <section class="variant"><h3>Angled tops</h3><div class="samples">
+      <div class="sample light"><span class="sample-label">Light</span><div class="marks"><span class="mark small beveled" aria-hidden="true"></span><span class="mark beveled" aria-hidden="true"></span></div></div>
+      <div class="sample dark"><span class="sample-label">Dark</span><div class="marks"><span class="mark small beveled" aria-hidden="true"></span><span class="mark beveled" aria-hidden="true"></span></div></div>
+    </div></section>
+  </div>
+  <p class="caption">16 px favicon · 24 px navbar</p>
+</section>

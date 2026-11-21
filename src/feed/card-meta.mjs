@@ -10,19 +10,25 @@ function label(value) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+export function normalize_tags(tags) {
+  return [...new Set(tags.map(tag => tag.normalize('NFKC').toLowerCase()
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, ' ').trim()).filter(Boolean))]
+}
+
 export function card_meta(frontmatter, config, draft = false) {
   const facets = Object.entries({ ...defaults, ...config }).flatMap(([name, spec]) => {
     const options = spec && typeof spec === 'object' && !Array.isArray(spec) ? spec : { key: spec }
     const keys = options.key ?? options.field ?? name
-    const values = (Array.isArray(keys) ? keys : [keys]).flatMap(key => {
+    const labels = (Array.isArray(keys) ? keys : [keys]).flatMap(key => {
       const value = frontmatter[key]
       return (Array.isArray(value) ? value : [value]).map(label).filter(Boolean)
     }).filter(value => !draft || name !== 'status' || value.toLowerCase() !== 'draft')
+    const values = name === 'tags' ? normalize_tags(draft ? ['draft', ...labels] : labels) : [...new Set(labels)]
     if (!values.length) return []
     return [{
       name, label: label(options.label) || name.replace(/[-_]/g, ' '),
       hue: Number.isFinite(options.hue) ? options.hue : hues[options.color] ?? hues[defaults[name]?.color],
-      values: [...new Set(values)],
+      values,
     }]
   })
   const raw_cover = frontmatter.cover
