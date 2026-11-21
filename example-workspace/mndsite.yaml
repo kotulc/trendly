@@ -3,6 +3,8 @@ description: Field notes on design, technology, and building things that last.
 content: ./content
 feed_url: posts
 expandable_feed: true
+drafts:
+  - content/posts/working-notes.md
 frontmatter:
   facets:
     format:

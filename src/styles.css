@@ -110,6 +110,7 @@ h1 { font-size: clamp(1.9rem, 3vw, 2.375rem); letter-spacing: -.04em; line-heigh
 .count, .activity { color: var(--site-gray-600); font-size: .875rem; }
 .count { white-space: nowrap; }
 .activity { margin-top: 1rem; }
+.publication-save-note { margin: 0 0 1.1rem; }
 .notice { display: flex; align-items: center; gap: .5rem; border: 1px solid var(--site-gray-200); background: var(--site-gray-100); border-radius: .4rem; padding: .6rem .75rem; margin: .6rem 0; font-size: .875rem; }
 .remote-form { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem; margin: 0 0 1.4rem; padding: .85rem; border: 1px solid var(--site-gray-200); border-radius: .5rem; }
 .remote-form label { display: grid; gap: .3rem; flex: 1 1 9rem; font-size: .8125rem; font-weight: 600; }
@@ -165,6 +166,9 @@ h1 { font-size: clamp(1.9rem, 3vw, 2.375rem); letter-spacing: -.04em; line-heigh
 .subscription-editor legend { color: var(--site-gray-600); font-size: .8125rem; }
 .subscription-add { margin-top: .65rem; }
 .source-list + .subscription-add { margin-top: 0; }
+.config-preview { margin-block-start: .65rem; border-block-start: 1px solid var(--site-gray-200); padding-block-start: .55rem; }
+.config-preview summary { cursor: pointer; font-size: .875rem; }
+.config-preview[open] summary { margin-block-end: .5rem; }
 .yaml-diff { max-height: 18rem; overflow: auto; margin: 0; padding: .65rem; background: var(--site-gray-100); border-radius: .3rem; font-size: .8125rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .yaml-diff span { display: block; }
 .yaml-diff [data-sign="+"] { background: light-dark(#dceee0, #263c2b); }

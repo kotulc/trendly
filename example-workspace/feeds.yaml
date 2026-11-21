@@ -7,3 +7,5 @@ feeds:
     url: https://www.nasa.gov/feeds/iotd-feed
   - name: Blender Videos
     url: https://video.blender.org/feeds/videos.xml
+  - name: Planet Monies
+    url: https://feeds.npr.org/510289/podcast.xml

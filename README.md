@@ -7,7 +7,7 @@ Trendly is a browser-first workspace for previewing a site's Git-managed posts a
 - **Browse the host site.** Use **Posts** and **Site feed** to work with the content from the open repository. Local and remote inputs produce the same in-memory view.
 - **Preview the published feed.** A compact list shows each post's media type, title, source, and date. Open one post at a time to see its summary, metadata, full Markdown, and rich media across the column. Trendly's local preview can also show clearly marked drafts and reload after an editor or agent changes the files.
 - **Read external feeds.** Browse combined or individual RSS and Atom subscriptions in **External feeds**. Use **Sources** to manage subscriptions. Direct browser fetch is the default, with an optional proxy for feeds that block browser reads.
-- **Manage feed configuration.** Edit site feed options in `mndsite.yaml` and subscriptions in `feeds.yaml`. Review the staged YAML changes before writing to the checkout or committing to GitHub.
+- **Manage feed configuration.** Save site feed options and subscriptions directly in Trendly, with optional YAML review.
 
 ## Repository and publishing
 
@@ -15,7 +15,7 @@ The host repository stores the site's posts and configuration. `mndsite.yaml` co
 
 mndsite can build a public site from the host repository and publish `rss.xml` when `rss.site_url` is set in `mndsite.yaml`. To read that site's published posts in **External feeds**, subscribe to the deployed `rss.xml` URL. Trendly and mndsite share the post card layout and can run independently. [mndsite](https://github.com/kotulc/mndsite)
 
-Use the **Site feed** switches to update the `drafts` list in `mndsite.yaml` for posts in the content tree. mndsite builds with draft-list support omit those posts from the public site and RSS. Existing files in `drafts/` can still be published by moving them into the content tree. Keep draft-only media outside the published asset directories. The [user guide](user_guide.md) covers writing changes and deployment.
+Use the **Site feed** switches to preview publication states in Trendly, then select **Save changes** whenever you want to keep those changes for posts in the content tree. mndsite builds with draft-list support omit content paths listed under `drafts` in `mndsite.yaml`. Files in `drafts/` can be published by moving them into the content tree. Keep draft-only media outside the published asset directories. The [user guide](user_guide.md) covers writing changes and deployment.
 
 ## Run locally
 
@@ -25,7 +25,7 @@ The static build is available with `npm run build`. Chrome and Edge can reread a
 
 ## External subscriptions
 
-In `feeds.yaml`, list subscription names and URLs under `feeds`. If some sources block browser reads, set an optional `proxy_url` pointing to a trusted service that accepts the feed URL as a `url` query parameter. Trendly tries the original feed first.
+In `feeds.yaml`, list subscription names and URLs under `feeds`. If some sources block browser reads, set a **Feed proxy URL** in Source settings. The saved `proxy_url` should point to a trusted service that accepts the feed URL as a `url` query parameter. Trendly tries the original feed first.
 
 When running `npm run dev`, Trendly can read NPR podcast feeds such as Planet Money through a same-origin development route. Keep the original NPR URL in `feeds.yaml`. A deployed static build uses the configured HTTPS `proxy_url` for blocked feeds. The endpoint should fetch only approved feed URLs server-side, return the feed XML, and allow requests from the deployed Trendly origin.
 

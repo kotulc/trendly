@@ -2,8 +2,8 @@ import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from '
 import { ArrowDownToLine, ArrowUpToLine, CircleHelp, FolderOpen, Github, Layers3, Link2, List, Moon, Plus, RefreshCw, Rss, Settings, Sun, Trash2, X } from 'lucide-react'
 import Feed, { entryMediaType, FeedCard, type FeedEntry } from './feed/Feed'
 import { exampleRepository, importFolder, loadRepository, normalizeSubscriptions, openFolder, publicationPath, remoteRepository, repoAsset, website, type Commit, type ConfigChange, type ConfigFile, type Repository, type Snapshot, type Subscription } from './repository'
-import { ConfigDialog } from './ConfigDialog'
-import { subscriptionDrafts, updatePostDraft, updateSubscriptions, type SubscriptionDraft } from './config'
+import { ConfigDialog, type PendingConfigChange } from './ConfigDialog'
+import { feedSettings, sameFeedSettings, sourceProxyUrl, subscriptionDrafts, updateFeedSettings, updatePostDrafts, updateSourceProxy, updateSubscriptions, type FeedSettings, type SubscriptionDraft } from './config'
 import { PublicationDialog, type PublicationCommit } from './PublicationDialog'
 import { feedFormatHint, fetchFeed, type FeedFormat } from './rss'
 
@@ -12,6 +12,7 @@ type Loaded = { repo: Repository; snapshot: Snapshot }
 type FeedResult = { name: string; entries: FeedEntry[]; format?: FeedFormat; error?: string }
 type FeedSource = { url?: string; candidate?: { name: string; format: FeedFormat }; subscriptions: SubscriptionDraft[]; removed: SubscriptionDraft[] }
 type PostView = 'posts' | 'preview'
+type SettingsEdit<T> = { original: T; value: T }
 
 const mediaLabels = { article: 'Article', audio: 'Audio', video: 'Video', image: 'Image', link: 'Link' }
 const feedFormatLabels: Record<FeedFormat, string> = { rss: 'RSS', atom: 'Atom' }
@@ -65,11 +66,16 @@ export function App() {
   const [feedByUrl, setFeedByUrl] = useState(() => new Map<string, FeedResult>())
   const [activeFeed, setActiveFeed] = useState('')
   const [sourceSelections, setSourceSelections] = useState<Record<PostView, string>>({ posts: '', preview: '' })
+  const [previewDrafts, setPreviewDrafts] = useState(() => new Map<string, boolean>())
   const [loadingFeeds, setLoadingFeeds] = useState(false)
   const [pendingPublication, setPendingPublication] = useState<{ entry: FeedEntry; destination: string }>()
   const [publicationCommit, setPublicationCommit] = useState<PublicationCommit>()
-  const [configEditor, setConfigEditor] = useState<{ path: ConfigFile; before?: string; repo: Repository; preview?: ConfigChange }>()
-  const [configSaved, setConfigSaved] = useState<{ path: ConfigFile; commit?: Commit }>()
+  const [configEditor, setConfigEditor] = useState<{
+    path: ConfigFile; before?: string; repo: Repository; pending?: PendingConfigChange
+  }>()
+  const [configSaved, setConfigSaved] = useState<{ path: ConfigFile; commit?: Commit; message?: string }>()
+  const [feedSettingsEdit, setFeedSettingsEdit] = useState<SettingsEdit<FeedSettings>>()
+  const [proxyEdit, setProxyEdit] = useState<SettingsEdit<string>>()
   const [subscriptionEdits, setSubscriptionEdits] = useState<{ before?: string; feeds: SubscriptionDraft[]; removed: SubscriptionDraft[] }>()
   const [expandedSource, setExpandedSource] = useState('')
   const fileInput = useRef<HTMLInputElement>(null)
@@ -111,9 +117,19 @@ export function App() {
       }
       setData({ repo, snapshot })
       setError('')
+      setPreviewDrafts(current => {
+        if (replace) return new Map()
+        if (!current.size) return current
+        return new Map(snapshot.posts.flatMap(post => {
+          const draft = current.get(post.id)
+          return draft !== undefined && draft !== !!post.draft ? [[post.id, draft] as const] : []
+        }))
+      })
       if (replace) {
         setPublicationCommit(undefined)
         setConfigSaved(undefined)
+        setFeedSettingsEdit(undefined)
+        setProxyEdit(undefined)
         setSubscriptionEdits(undefined)
         setExpandedSource('')
         setSearch('')
@@ -210,11 +226,15 @@ export function App() {
 
   const snapshot = data?.snapshot
   const feedYaml = snapshot?.configs['feeds.yaml']
+  const siteYaml = snapshot?.configs['mndsite.yaml']
+  const savedFeedSettings = useMemo(() => feedSettings(siteYaml), [siteYaml])
+  const savedProxyUrl = useMemo(() => sourceProxyUrl(feedYaml), [feedYaml])
   const before = subscriptionEdits ? subscriptionEdits.before : feedYaml
   const savedSubscriptions = useMemo(() => subscriptionDrafts(before), [before])
   const subscriptions = subscriptionEdits?.feeds ?? savedSubscriptions
   const removedSubscriptions = subscriptionEdits?.removed ?? []
   const subscriptionsChanged = !!subscriptionEdits
+  const sourceChanges = subscriptionsChanged || !!proxyEdit
   const readerSubscriptions = subscriptionEdits ? normalizeSubscriptions(subscriptions) : snapshot?.subscriptions ?? []
   const readerKey = JSON.stringify(readerSubscriptions)
   const readingFeeds = page === 'feeds' || page === 'sources'
@@ -244,7 +264,25 @@ export function App() {
     return () => window.clearTimeout(timer)
   }, [readingFeeds, readerKey, snapshot?.proxy, feedByUrl, loadingFeeds, subscriptionsChanged])
 
-  const posts = snapshot?.posts || []
+  const savedPosts = snapshot?.posts || []
+  const draftChanges = new Map(savedPosts.flatMap(post => {
+    const draft = previewDrafts.get(post.id)
+    return draft !== undefined && draft !== !!post.draft && !post.path.startsWith('drafts/')
+      ? [[post.path, draft] as const] : []
+  }))
+  const feedChanges = !!feedSettingsEdit || draftChanges.size > 0
+  const posts = page === 'preview' && previewDrafts.size > 0 ? savedPosts.map(post => {
+    const draft = previewDrafts.get(post.id)
+    if (draft === undefined || draft === !!post.draft) return post
+    const tags = post.tags.filter(tag => tag !== 'draft')
+    if (draft) tags.unshift('draft')
+    const facets = (post.facets ?? []).filter(facet => facet.name !== 'tags')
+    if (tags.length) {
+      const previous = post.facets?.find(facet => facet.name === 'tags')
+      facets.push({ name: 'tags', label: 'Tag', ...previous, values: tags })
+    }
+    return { ...post, draft, tags, facets, href: draft ? undefined : post.href }
+  }) : savedPosts
   const query = search.trim().toLowerCase()
   const facet = (entry: FeedEntry, name: string) => entry.facets?.find(item => item.name === name)?.values || []
   const matches = (entry: FeedEntry) => !query ||
@@ -334,16 +372,31 @@ export function App() {
   const active = navigation.find(item => item.id === page)!
   const searchLabel = `Search ${active.title.toLowerCase()}`
 
-  function preparePublication(entry: FeedEntry, fromSiteFeed = false) {
+  function togglePreviewPublication(id: string) {
+    const post = savedPosts.find(entry => entry.id === id)
+    if (!post) return
+    setPreviewDrafts(current => {
+      const saved = !!post.draft
+      const draft = !(current.get(id) ?? saved)
+      const next = new Map(current)
+      if (draft === saved) next.delete(id)
+      else next.set(id, draft)
+      return next
+    })
+  }
+
+  function preparePublication(entry: FeedEntry) {
     if (!data) return
     try {
       setError('')
-      if (!entry.path.startsWith('drafts/') && (fromSiteFeed || entry.draft)) {
+      if (entry.draft && !entry.path.startsWith('drafts/')) {
         const path = 'mndsite.yaml'
         const before = data.snapshot.configs[path]
-        const after = updatePostDraft(before, entry.path, !entry.draft)
+        const after = updatePostDrafts(before, new Map([[entry.path, false]]))
         if (after === undefined || after === before) throw new Error('Refresh the workspace and try the publication change again.')
-        setConfigEditor({ path, before, repo: data.repo, preview: { path, before, after } })
+        setConfigEditor({ path, before, repo: data.repo, pending: {
+          change: { path, before, after }, postTitle: entry.title, action: 'Publish post', successMessage: 'Post marked published.',
+        } })
       } else {
         setPendingPublication({ entry, destination: publicationPath(data.snapshot, entry) })
       }
@@ -382,19 +435,99 @@ export function App() {
     }
   }
 
-  function subscriptionChange(): ConfigChange {
-    if (before !== feedYaml) throw new Error('feeds.yaml changed since you started editing. Discard these changes to load the latest version.')
-    const after = updateSubscriptions(before, subscriptions)
-    if (after === before) throw new Error('Make a change before reviewing the YAML.')
+  function editFeedSettings(value: FeedSettings) {
+    setFeedSettingsEdit(current => sameFeedSettings(value, savedFeedSettings)
+      ? undefined : { original: current?.original ?? savedFeedSettings, value })
+    setError('')
+  }
+
+  function editProxyUrl(value: string) {
+    setProxyEdit(current => value.trim() === savedProxyUrl.trim()
+      ? undefined : { original: current?.original ?? savedProxyUrl, value })
+    setError('')
+  }
+
+  function sourceConfigChange(): ConfigChange {
+    if (before !== feedYaml || (proxyEdit && proxyEdit.original !== savedProxyUrl)) {
+      throw new Error('Source settings changed on disk. Discard changes to use the latest version.')
+    }
+    const updatedSubscriptions = subscriptionsChanged ? updateSubscriptions(before, subscriptions) : before
+    const after = proxyEdit ? updateSourceProxy(updatedSubscriptions, proxyEdit.value) : updatedSubscriptions
+    if (after === undefined || after === before) throw new Error('Make a source settings change before saving.')
     return { path: 'feeds.yaml', before, after }
   }
 
-  function openSourceSettings(review = false) {
+  function openSourceSettings() {
     if (!data) return
     setError('')
+    setConfigEditor({ path: 'feeds.yaml', before: feedYaml, repo: data.repo })
+  }
+
+  function discardSourceChanges() {
+    setSubscriptionEdits(undefined)
+    setProxyEdit(undefined)
+    setExpandedSource('')
+    setError('')
+  }
+
+  function discardFeedChanges() {
+    setPreviewDrafts(new Map())
+    setFeedSettingsEdit(undefined)
+    setError('')
+  }
+
+  async function finishConfigWrite(path: ConfigFile, repo: Repository, commit?: Commit, message?: string, savedPageSettings = true) {
+    setConfigSaved({ path, commit, message })
+    if (repo.refresh && await load(repo.refresh, false) && savedPageSettings) {
+      if (path === 'feeds.yaml') {
+        setSubscriptionEdits(undefined)
+        setProxyEdit(undefined)
+      } else {
+        setFeedSettingsEdit(undefined)
+      }
+    }
+  }
+
+  async function saveLocalConfig(repo: Repository, prepareChange: () => ConfigChange) {
+    if (busy || !repo.writeConfig) return
+    ++readVersion.current
+    foreground.current = true
+    setBusy(true)
+    setError('')
     try {
-      setConfigEditor({ path: 'feeds.yaml', before: feedYaml, repo: data.repo, preview: review ? subscriptionChange() : undefined })
+      const change = prepareChange()
+      await repo.writeConfig(change)
+      await finishConfigWrite(change.path, repo)
     } catch (failure) { setError(message(failure)) }
+    finally {
+      foreground.current = false
+      setBusy(false)
+    }
+  }
+
+  function saveConfigChanges(prepareChange: () => ConfigChange) {
+    if (!data) return
+    if (data.repo.writeConfig) {
+      void saveLocalConfig(data.repo, prepareChange)
+      return
+    }
+    setError('')
+    try {
+      const change = prepareChange()
+      setConfigEditor({ path: change.path, before: change.before, repo: data.repo,
+        pending: { change, action: 'Save changes' } })
+    } catch (failure) { setError(message(failure)) }
+  }
+
+  function feedConfigChange(): ConfigChange {
+    const path = 'mndsite.yaml'
+    if (feedSettingsEdit && !sameFeedSettings(feedSettingsEdit.original, savedFeedSettings)) {
+      throw new Error('Feed settings changed on disk. Discard changes to use the latest version.')
+    }
+    const updatedSettings = feedSettingsEdit ? updateFeedSettings(siteYaml, feedSettingsEdit.value) : siteYaml
+    const after = draftChanges.size ? updatePostDrafts(updatedSettings, draftChanges) : updatedSettings
+    if (after === undefined || after === siteYaml) throw new Error('Make a feed settings change before saving.')
+    return { path, before: siteYaml, after }
   }
 
   return (
@@ -466,31 +599,30 @@ export function App() {
             <p>{page === 'posts' && snapshot?.description ? snapshot.description : descriptions[page]}</p>
           </div>
           {(page === 'preview' || page === 'sources') && <div className="settings-actions">
-            {page === 'preview' ? <>
-              <button className="button" disabled={busy || !data} onClick={() => {
+            {page === 'preview'
+              ? <button className="button" disabled={busy || !data} onClick={() => {
                 if (data) setConfigEditor({ path: 'mndsite.yaml', before: data.snapshot.configs['mndsite.yaml'], repo: data.repo })
               }}><Settings size={15} aria-hidden="true" /> Feed settings</button>
-              {snapshot?.rss && <a className="button" href={snapshot.rss} target="_blank" rel="noreferrer"><Rss size={15} aria-hidden="true" /> Published RSS</a>}
-            </> : <>
-              <button className="button" disabled={busy || !data} onClick={() => openSourceSettings()}>
+              : <button className="button" disabled={busy || !data} onClick={openSourceSettings}>
                 <Settings size={15} aria-hidden="true" /> Source settings
-              </button>
-              {subscriptionsChanged && <>
-                <button className="button primary" disabled={busy} onClick={() => openSourceSettings(true)}>Review subscription changes</button>
-                <button className="button" disabled={busy} onClick={() => {
-                  setSubscriptionEdits(undefined)
-                  setExpandedSource('')
-                  setError('')
-                }}>Discard changes</button>
-              </>}
-            </>}
+              </button>}
+            {(page === 'preview' ? feedChanges : sourceChanges) && <button className="button primary" disabled={busy}
+              onClick={() => saveConfigChanges(page === 'preview' ? feedConfigChange : sourceConfigChange)}>Save changes</button>}
+            {(page === 'preview' ? feedChanges || previewDrafts.size > 0 : sourceChanges) && <button className="button" disabled={busy}
+              onClick={page === 'preview' ? discardFeedChanges : discardSourceChanges}>Discard changes</button>}
+            {page === 'preview' && snapshot?.rss && <a className="button" href={snapshot.rss} target="_blank" rel="noreferrer">
+              <Rss size={15} aria-hidden="true" /> Published RSS
+            </a>}
           </div>}
+          {page === 'preview' && previewDrafts.size > draftChanges.size && <p className="activity publication-save-note">
+            Use Posts to publish files from <code>drafts/</code>.
+          </p>}
           {error && <div className="notice" role="alert"><CircleHelp size={18} />{error}</div>}
           {repositoryPage && publicationCommit && <p className="notice" role="status">
             Committed to GitHub. <a href={publicationCommit.url} target="_blank" rel="noreferrer">View commit {publicationCommit.oid.slice(0, 8)}</a>
           </p>}
           {configSaved && (page === 'preview' && configSaved.path === 'mndsite.yaml' || page === 'sources' && configSaved.path === 'feeds.yaml') &&
-            <p className="notice" role="status">Saved {configSaved.path}.
+            <p className="notice" role="status">{configSaved.message ?? `Saved ${configSaved.path}.`}
               {configSaved.commit && <a href={configSaved.commit.url} target="_blank" rel="noreferrer">View commit {configSaved.commit.oid.slice(0, 8)}</a>}
             </p>}
           <div className="controls">
@@ -537,9 +669,9 @@ export function App() {
               publicationControls={page === 'preview'}
               renderAction={page === 'preview' ? entry =>
                 <button className="button state-toggle" type="button" role="switch" aria-checked={!entry.draft}
-                  aria-label={`${entry.title} publication`} disabled={busy || (entry.path.startsWith('drafts/') && !data.repo.publication)}
-                  title={entry.draft ? 'Publish' : 'Unpublish'}
-                  onClick={() => preparePublication(entry, true)}>{entry.draft ? 'Unpublished' : 'Published'}</button>
+                  aria-label={`${entry.title} publication`} disabled={busy}
+                  title={entry.draft ? 'Preview as published' : 'Preview as unpublished'}
+                  onClick={() => togglePreviewPublication(entry.id)}>{entry.draft ? 'Unpublished' : 'Published'}</button>
               : data.repo.publication ? entry =>
                 <button className="button post-action" disabled={busy} onClick={() => preparePublication(entry)}
                   title={entry.draft ? 'Publish' : 'Unpublish'} aria-label={`${entry.draft ? 'Publish' : 'Unpublish'} ${entry.title}`}>
@@ -620,13 +752,21 @@ export function App() {
           if (data.repo.refresh) void load(data.repo.refresh, false)
         }} />}
       {configEditor && <ConfigDialog {...configEditor}
-        subscriptionChange={configEditor.path === 'feeds.yaml' && subscriptionsChanged ? subscriptionChange : undefined}
+        before={configEditor.pending ? configEditor.before : snapshot?.configs[configEditor.path]}
+        editor={configEditor.path === 'mndsite.yaml'
+          ? { kind: 'feed', value: feedSettingsEdit?.value ?? savedFeedSettings, onChange: editFeedSettings }
+          : { kind: 'source', value: proxyEdit?.value ?? savedProxyUrl, onChange: editProxyUrl }}
+        prepareChange={configEditor.path === 'mndsite.yaml'
+          ? feedChanges ? feedConfigChange : undefined
+          : sourceChanges ? sourceConfigChange : undefined}
+        onDiscard={() => {
+          if (configEditor.path === 'feeds.yaml') discardSourceChanges()
+          else discardFeedChanges()
+          setConfigEditor(undefined)
+        }}
         onClose={() => setConfigEditor(undefined)} onWrite={commit => {
-        setConfigSaved({ path: configEditor.path, commit })
         setConfigEditor(undefined)
-        if (configEditor.repo.refresh) void load(configEditor.repo.refresh, false).then(loaded => {
-          if (loaded && configEditor.path === 'feeds.yaml') setSubscriptionEdits(undefined)
-        })
+        void finishConfigWrite(configEditor.path, configEditor.repo, commit, configEditor.pending?.successMessage, !configEditor.pending?.postTitle)
       }} />}
     </div>
   )

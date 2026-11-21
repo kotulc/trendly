@@ -1,11 +1,15 @@
-import { isMap, isSeq, parseDocument } from 'yaml'
+import { isMap, isSeq, parseDocument, type Node } from 'yaml'
 import { isDraftPath, website } from './repository'
 
-type FeedSettings = { section: string; expandable: boolean; siteUrl: string }
+export type FeedSettings = { section: string; expandable: boolean; siteUrl: string }
+
+export function sameFeedSettings(first: FeedSettings, second: FeedSettings) {
+  return first.section === second.section && first.expandable === second.expandable && first.siteUrl === second.siteUrl
+}
 export type SubscriptionDraft = { id: number; originalIndex?: number; name: string; url: string }
 
 function readYaml(contents?: string) {
-  const doc = parseDocument(contents ?? '')
+  const doc = parseDocument<Node>(contents ?? '')
   if (doc.errors.length) throw new Error(doc.errors[0].message)
   return doc
 }
@@ -56,19 +60,21 @@ export function updateFeedSettings(contents: string | undefined, values: FeedSet
   return serialize(doc, contents)
 }
 
-export function updatePostDraft(contents: string | undefined, path: string, draft: boolean) {
-  if (!isDraftPath(path)) throw new Error('Choose a repository-relative Markdown path.')
+export function updatePostDrafts(contents: string | undefined, changes: ReadonlyMap<string, boolean>) {
+  if ([...changes.keys()].some(path => !isDraftPath(path))) throw new Error('Choose repository-relative Markdown paths.')
   const doc = readYaml(contents)
   const paths = doc.get('drafts', true)
+  if (!isSeq(paths) && doc.get('drafts') != null) throw new Error('The draft settings must be a list of Markdown paths.')
+  const current = isSeq(paths) ? paths.toJSON() as string[] : []
+  const existing = new Set(current)
+  const added = [...changes].filter(([path, draft]) => draft && !existing.has(path)).map(([path]) => path)
+  const removed = current.some(path => changes.get(path) === false)
+  if (!added.length && !removed) return contents
   if (isSeq(paths)) {
-    const current = paths.toJSON() as string[]
-    if (current.includes(path) === draft) return contents
-    if (draft) paths.add(path)
-    else paths.items = paths.items.filter((_, index) => current[index] !== path)
-  } else if (doc.get('drafts') == null && draft) {
-    doc.set('drafts', [path])
+    if (removed) paths.items = paths.items.filter((_, index) => changes.get(current[index]) !== false)
+    for (const path of added) paths.add(path)
   } else {
-    return contents
+    doc.set('drafts', added)
   }
   return serialize(doc, contents)
 }
@@ -80,6 +86,27 @@ export function subscriptionDrafts(contents?: string): SubscriptionDraft[] {
   return list.items.flatMap((entry, index) => isMap(entry) ? [{
     id: index, originalIndex: index, name: field(entry.get('name')), url: field(entry.get('url')),
   }] : [])
+}
+
+export function sourceProxyUrl(contents?: string) {
+  const doc = readYaml(contents)
+  return isMap(doc.contents) ? field(doc.get('proxy_url')) : ''
+}
+
+export function updateSourceProxy(contents: string | undefined, value: string) {
+  const doc = readYaml(contents)
+  const url = value.trim()
+  const previous = isMap(doc.contents) ? field(doc.get('proxy_url')).trim() : ''
+  if (url === previous) return contents
+  const proxy = website(url)
+  if (url && (!proxy || new URL(proxy).hash)) {
+    throw new Error('Enter an absolute HTTP or HTTPS feed proxy URL without a fragment.')
+  }
+  if (isSeq(doc.contents)) doc.contents = doc.createNode({ feeds: doc.contents })
+  if (doc.contents != null && !isMap(doc.contents)) throw new Error('Use a YAML map or subscription list in feeds.yaml.')
+  if (proxy) doc.set('proxy_url', proxy)
+  else doc.delete('proxy_url')
+  return serialize(doc, contents)
 }
 
 export function updateSubscriptions(contents: string | undefined, drafts: SubscriptionDraft[]) {

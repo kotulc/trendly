@@ -1,6 +1,7 @@
 ---
 title: A quieter reading list
 description: An unfinished note on following fewer sources.
+date: 2026-11-21
 tags: [reading]
 format: Working note
 sources:

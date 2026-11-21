@@ -5,7 +5,7 @@ This content-only folder is the example repository bundled with Trendly. Open it
 - `mndsite.yaml` defines the public content directory and shared site feed.
 - `content/posts/` contains published example posts with excerpts, tags, status, site, and formats.
 - `content/_assets/` contains local photographs used as inline images.
-- `drafts/` contains local preview content outside the public build.
+- `mndsite.yaml` lists `content/posts/working-notes.md` as a draft. In Trendly, mark **A quieter reading list** as **Published** in Site feed and select **Save changes** to remove it from the draft list.
 - `feeds.yaml` contains subscriptions for Trendly's External feeds view.
 
 The two FR Wheelworks examples adapt excerpts and photos from the original posts. The [original license](frwheelworks-license.txt) is included. The full archive and screenshots live in the [FR Wheelworks repository](https://github.com/kotulc/frwheelworks).

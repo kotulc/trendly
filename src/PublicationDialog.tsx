@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import type { FeedEntry } from './feed/Feed'
+import { ModalDialog } from './ModalDialog'
 import { publicationPath, type Repository, type Snapshot } from './repository'
 
 type Publication = NonNullable<Repository['publication']>
@@ -14,12 +15,9 @@ export function PublicationDialog({ entry, publication, repository, snapshot, in
   onClose: () => void
   onCommit: (commit: PublicationCommit) => void
 }) {
-  const dialog = useRef<HTMLDialogElement>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const action = entry.draft ? 'Publish' : 'Unpublish'
-
-  useEffect(() => { dialog.current?.showModal() }, [])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -40,10 +38,7 @@ export function PublicationDialog({ entry, publication, repository, snapshot, in
     } finally { setSaving(false) }
   }
 
-  return <dialog ref={dialog} className="publication-dialog" aria-labelledby="publication-title" onCancel={event => {
-    event.preventDefault()
-    if (!saving) onClose()
-  }}>
+  return <ModalDialog className="publication-dialog" labelledBy="publication-title" saving={saving} onClose={onClose}>
     <form onSubmit={submit}>
       <h2 id="publication-title">{action} post</h2>
       <p><strong>{entry.title}</strong> in {repository} on <code>{publication.branch}</code></p>
@@ -59,5 +54,5 @@ export function PublicationDialog({ entry, publication, repository, snapshot, in
         <button className="button primary" type="submit" disabled={saving}>{saving ? 'Committing…' : `${action} on GitHub`}</button>
       </div>
     </form>
-  </dialog>
+  </ModalDialog>
 }
