@@ -92,8 +92,13 @@ export async function fetchFeed(feed: Subscription, proxy?: string): Promise<{ f
     return response.text()
   }
   let raw: string
-  try { raw = await request(feed.url) }
+  const localNprPath = !proxy && /^https:\/\/feeds\.npr\.org(\/[0-9]+\/podcast\.xml)$/.exec(feed.url)?.[1]
+  try { raw = await request(import.meta.env.DEV && localNprPath ? `/_trendly/npr${localNprPath}` : feed.url) }
   catch (error) {
+    if (import.meta.env.DEV && localNprPath) {
+      const detail = error instanceof Error ? error.message : 'Request failed.'
+      throw new Error(`The local NPR proxy could not load this feed. ${detail}`)
+    }
     if (!proxy) {
       if (error instanceof TypeError) {
         throw new Error('The browser request failed. If the publisher blocks cross-origin requests, use a trusted proxy_url in feeds.yaml.')

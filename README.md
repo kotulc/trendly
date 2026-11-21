@@ -27,6 +27,8 @@ The static build is available with `npm run build`. Chrome and Edge can reread a
 
 In `feeds.yaml`, list subscription names and URLs under `feeds`. If some sources block browser reads, set an optional `proxy_url` pointing to a trusted service that accepts the feed URL as a `url` query parameter. Trendly tries the original feed first.
 
+When running `npm run dev`, Trendly can read NPR podcast feeds such as Planet Money through a same-origin development route. Keep the original NPR URL in `feeds.yaml`. A deployed static build uses the configured HTTPS `proxy_url` for blocked feeds. The endpoint should fetch only approved feed URLs server-side, return the feed XML, and allow requests from the deployed Trendly origin.
+
 **Sources** lists configured subscriptions, RSS and Atom URLs recognized in post citations, and the host site's RSS URL when configured. Support for more feed formats is planned. [Implementation plan](implementation_plan.md#5-refine-sources-and-expand-feed-format-support)
 
 ## Post cards

@@ -2,7 +2,7 @@
 
 Build Trendly as a lightweight host-site workspace and feed reader with a Pages CMS–style interface. The open repository supplies the host site's Markdown posts, drafts, media, and YAML configuration. Editing happens in an external editor or agent. Trendly commits publication changes on a GitHub branch, and the repository's existing Git and mndsite workflow handles deployment.
 
-The initial explorer, standalone mndsite feed and RSS export, and Trendly preview are implemented. The two apps build independently using matching copies of the portable feed view. Section 5 records the Sources UI changes and the plan for additional feed formats.
+The initial explorer, standalone mndsite feed and RSS export, and Trendly preview are implemented. The two apps build independently using matching copies of the portable feed view. Sections 5 and 6 cover additional feed formats, indexed search, and server-side feed fetching.
 
 ## 1. Replace the authoring shell with a repository explorer
 
@@ -53,6 +53,15 @@ The initial explorer, standalone mndsite feed and RSS export, and Trendly previe
 
 **Exit check.** Open a host repository with posts that cite both ordinary links and supported feed URLs. Verify that **Sources** shows the feed URLs and that the citations still appear on post cards. Subscribe to a deployed mndsite `rss.xml` and read its published entries in **External feeds**. Verify that RSS, Atom, and the first additional format can be read together and that a failed subscription leaves the other feeds available.
 
+## 6. Build indexed search and a shared feed fetcher
+
+- Build on the header search and its `/` shortcut. Add ranked full-text results for published host posts and subscribed feed entries, with scope, tag, date, and media filters. Show the source and a matched excerpt. Open results in the existing post or feed card. Keep the current in-browser search available when the service is unavailable and for local drafts.
+- Add an optional indexing service that reads published host content at a repository revision and ingests entries from configured subscriptions. Index titles, summaries, available body text, and metadata using stable post paths and feed entry IDs. Update the index as content and feeds change. Remove unpublished posts and entries for removed subscriptions from the workspace's search results.
+- Use the same server-side feed fetcher for background indexing and on-demand proxy requests. Support Trendly's existing `proxy_url` contract by accepting the feed URL in a `url` query parameter and returning the feed body. Keep direct browser fetching for feeds that allow it. Restrict the service to approved feed URLs and validate redirect targets. Set request timeouts and response size limits, and cache responses so the reader and indexer can reuse them.
+- Deploy the service independently of the static Trendly app. Connect a deployed Trendly instance through `proxy_url` and share the fetcher with the indexing pipeline. Use Planet Money's NPR RSS feed to verify the deployed path that the local development proxy currently covers.
+
+**Exit check.** On a deployed Trendly instance, subscribe to Planet Money and verify that it loads in **External feeds** and its episodes appear in indexed search. Edit and unpublish a host post, then verify that search reflects both changes. Stop the service and check that local post search and directly accessible feeds still work.
+
 ## Later
 
-Revisit authenticated remote repositories, richer feed filtering, offline caching, and automatic refresh after the read path and standalone publishing work well. Remote semantic indexing and social integrations remain deferred.
+Revisit authenticated remote repositories, richer feed filtering, offline caching, and automatic refresh after the read path and standalone publishing work well. Semantic search and social integrations remain deferred.
