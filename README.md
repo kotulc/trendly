@@ -21,7 +21,9 @@ Use the **Site feed** switches to preview publication states in Trendly, then se
 
 Use Node.js 22.12 or later, install dependencies with `npm ci`, and start with `npm run dev`. On Windows PowerShell, use `npm.cmd` in place of `npm` if needed. The app opens the bundled [example repository](example-workspace). Use **Open folder** to choose it on disk or to open your own checkout.
 
-The static build is available with `npm run build`. Chrome and Edge can reread an open folder. Firefox imports a read-only snapshot, so reselect the directory after editing files. See the [user guide](user_guide.md) for the walkthrough and the [implementation plan](implementation_plan.md) for the architecture and remaining work.
+Keep **Open folder** pointed at the same checkout your editor or agent uses. When the browser grants a directory handle, Trendly checks for changes about every two seconds while the tab is visible and refreshes when you return to it. Saved working-tree edits appear without a Git commit. Firefox's folder import is a read-only snapshot. Select **Reopen folder** after editing files.
+
+The static build is available with `npm run build`. See the [user guide](user_guide.md) for remote browsing and GitHub writes, and the [implementation plan](implementation_plan.md) for the architecture and remaining work.
 
 ## External subscriptions
 

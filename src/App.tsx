@@ -8,7 +8,7 @@ import { PublicationDialog, type PublicationCommit } from './PublicationDialog'
 import { feedFormatHint, fetchFeed, type FeedFormat } from './rss'
 
 type Page = 'posts' | 'preview' | 'feeds' | 'sources'
-type Loaded = { repo: Repository; snapshot: Snapshot }
+type Loaded = { repo: Repository; snapshot: Snapshot; workspace: number }
 type FeedResult = { name: string; entries: FeedEntry[]; format?: FeedFormat; error?: string }
 type FeedSource = { url?: string; candidate?: { name: string; format: FeedFormat }; subscriptions: SubscriptionDraft[]; removed: SubscriptionDraft[] }
 type PostView = 'posts' | 'preview'
@@ -16,6 +16,7 @@ type SettingsEdit<T> = { original: T; value: T }
 
 const mediaLabels = { article: 'Article', audio: 'Audio', video: 'Video', image: 'Image', link: 'Link' }
 const feedFormatLabels: Record<FeedFormat, string> = { rss: 'RSS', atom: 'Atom' }
+const repositorySourceLabels = { example: 'Bundled example', checkout: 'Live local checkout', import: 'Imported snapshot', github: 'GitHub' }
 const postStatuses = ['Archived', 'Draft', 'Published']
 
 function withPostStatus(post: FeedEntry): FeedEntry {
@@ -77,6 +78,7 @@ export function App() {
   const [dateOrder, setDateOrder] = useState<'newest' | 'oldest'>('newest')
   const [remoteForm, setRemoteForm] = useState(false)
   const [error, setError] = useState('')
+  const [liveRefreshError, setLiveRefreshError] = useState('')
   const [busy, setBusy] = useState(false)
   const [dark, setDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
   const [feedByUrl, setFeedByUrl] = useState(() => new Map<string, FeedResult>())
@@ -120,7 +122,12 @@ export function App() {
     let repo: Repository | undefined
     try {
       repo = await get()
-      if (quiet && repo.stamp === data?.repo.stamp) { repo.dispose?.(); return }
+      if (version !== readVersion.current) { repo.dispose?.(); return }
+      if (quiet && repo.stamp === data?.repo.stamp) {
+        repo.dispose?.()
+        setLiveRefreshError('')
+        return
+      }
       const snapshot = await loadRepository(repo)
       if (version !== readVersion.current) { repo.dispose?.(); return }
       if (snapshot.proxy !== data?.snapshot.proxy || replace) {
@@ -131,8 +138,9 @@ export function App() {
       if (replace) {
         setActiveFeed('')
       }
-      setData({ repo, snapshot })
-      setError('')
+      setData({ repo, snapshot, workspace: replace ? version : data?.workspace ?? version })
+      setLiveRefreshError('')
+      if (!quiet) setError('')
       setPreviewDrafts(current => {
         if (replace) return new Map()
         if (!current.size) return current
@@ -161,7 +169,10 @@ export function App() {
       return true
     } catch (failure) {
       repo?.dispose?.()
-      if (version === readVersion.current && !(failure instanceof DOMException && failure.name === 'AbortError')) setError(message(failure))
+      if (version === readVersion.current && !(failure instanceof DOMException && failure.name === 'AbortError')) {
+        if (quiet) setLiveRefreshError(message(failure))
+        else setError(message(failure))
+      }
     } finally {
       if (!quiet && version === readVersion.current) {
         foreground.current = false
@@ -198,12 +209,30 @@ export function App() {
 
   useEffect(() => {
     const repo = data?.repo
-    if (!repo) return
-    if (repo.refresh && !repo.revision && !busy) {
-      const timer = window.setInterval(() => {
-        if (!document.hidden) void load(repo.refresh!, false, true)
-      }, 3500)
-      return () => window.clearInterval(timer)
+    if (repo?.source !== 'checkout' || !repo.refresh || busy) return
+    const refresh = repo.refresh
+
+    let timer: number | undefined
+    let running = false
+    let stopped = false
+    function schedule() {
+      window.clearTimeout(timer)
+      if (!stopped && !document.hidden) timer = window.setTimeout(check, 2000)
+    }
+    async function check() {
+      if (stopped || running || document.hidden) return
+      window.clearTimeout(timer)
+      running = true
+      await load(refresh, false, true)
+      running = false
+      schedule()
+    }
+    schedule()
+    document.addEventListener('visibilitychange', check)
+    return () => {
+      stopped = true
+      window.clearTimeout(timer)
+      document.removeEventListener('visibilitychange', check)
     }
   }, [data, busy])
 
@@ -230,14 +259,12 @@ export function App() {
   async function openRemote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    await load(() => remoteRepository(String(form.get('repository')), String(form.get('ref'))))
-    setRemoteForm(false)
+    if (await load(() => remoteRepository(String(form.get('repository')), String(form.get('ref'))))) setRemoteForm(false)
   }
 
   async function reload() {
     if (data?.repo.refresh) await load(data.repo.refresh, false)
-    else if (data?.repo.label === 'Example repository') return
-    else chooseFolder()
+    else if (data?.repo.source === 'import') chooseFolder()
   }
 
   const snapshot = data?.snapshot
@@ -586,7 +613,11 @@ export function App() {
         <aside className="sidebar">
           <div className="sidebar-repo">
             <strong>{snapshot?.title || 'Repository'}</strong>
-            <span>{data?.repo.label}{data?.repo.revision && ` · ${data.repo.revision.slice(0, 8)}`}</span>
+            {data && <>
+              <span>{data.repo.label}</span>
+              <span title={data.repo.revision}>{repositorySourceLabels[data.repo.source]}
+                {data.repo.ref && ` · ${data.repo.ref}`}{data.repo.revision && ` · ${data.repo.revision.slice(0, 8)}`}</span>
+            </>}
           </div>
           <nav aria-label="Trendly views">
             {navigation.map(({ id, title, icon: Icon }) => <Fragment key={id}>
@@ -637,6 +668,7 @@ export function App() {
             Use Posts to publish files from <code>drafts/</code>.
           </p>}
           {error && <div className="notice" role="alert"><CircleHelp size={18} />{error}</div>}
+          {liveRefreshError && !error && <p className="notice" role="status">Showing the last loaded checkout. {liveRefreshError}</p>}
           {repositoryPage && publicationCommit && <p className="notice" role="status">
             Committed to GitHub. <a href={publicationCommit.url} target="_blank" rel="noreferrer">View commit {publicationCommit.oid.slice(0, 8)}</a>
           </p>}
@@ -674,15 +706,15 @@ export function App() {
               </select>
             </>}
             <div className="controls-end">
-              {page !== 'feeds' && data && data.repo.label !== 'Example repository' &&
-                <button className="button" disabled={busy} onClick={() => void reload()}><RefreshCw size={15} aria-hidden="true" /> {page === 'sources' ? 'Reload workspace' : 'Refresh'}</button>}
+              {page !== 'feeds' && data && data.repo.source !== 'example' &&
+                <button className="button" disabled={busy} onClick={() => void reload()}><RefreshCw size={15} aria-hidden="true" /> {data.repo.source === 'import' ? 'Reopen folder' : page === 'sources' ? 'Reload workspace' : 'Refresh'}</button>}
               <span className="count" role="status">{countText}</span>
             </div>
           </div>
 
           {busy && <p className="activity" role="status">Loading repository…</p>}
           {data && listedPosts && (
-            <Feed entries={listedPosts} key={`${page}-${data.repo.label}-${page === 'posts' ? linkedPost || '' : ''}`}
+            <Feed entries={listedPosts} key={`${page}-${data.workspace}-${page === 'posts' ? linkedPost || '' : ''}`}
               initialExpanded={page === 'posts' ? linkedPost : undefined} defaultSource={data.snapshot.title}
               resolveImage={(value, entry) => repoAsset(data.repo, value, entry)}
               publicationControls={page === 'preview'}
@@ -758,7 +790,7 @@ export function App() {
               const failure = feedByUrl.get(feed.url)?.error
               return failure && <p className="notice" key={feed.url}>{feed.name} could not be loaded. {failure}</p>
             })}
-            <Feed entries={activity} />
+            <Feed entries={activity} key={data?.workspace} />
             {feedEntries.length > 0 && activity.length === 0 && <p className="activity">No entries match these filters.</p>}
           </>}
         </main>

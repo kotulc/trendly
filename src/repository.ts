@@ -4,6 +4,8 @@ import { card_meta } from './feed/card-meta.mjs'
 
 export type Repository = {
   label: string
+  source: 'example' | 'checkout' | 'import' | 'github'
+  ref?: string
   revision?: string
   stamp?: string
   paths: () => string[]
@@ -231,7 +233,7 @@ function localRepository(files: Map<string, File>, label: string, refresh?: Repo
   const blobs = new Map<string, string>()
   const paths = [...files.keys()]
   return {
-    label, paths: () => paths, refresh,
+    label, source: refresh ? 'checkout' : 'import', paths: () => paths, refresh,
     stamp: JSON.stringify(paths.sort().map(path => [path, files.get(path)?.lastModified, files.get(path)?.size])),
     async read(path) {
       const file = files.get(path)
@@ -340,7 +342,7 @@ export async function remoteRepository(input: string, ref: string): Promise<Repo
           createCommitOnBranch(input: $input) { commit { oid url } }
         }`,
         variables: { input: {
-          branch: { repositoryNameWithOwner: address, branchName: `refs/heads/${branchName}` },
+          branch: { repositoryNameWithOwner: address, refName: `refs/heads/${branchName}` },
           expectedHeadOid: commit.sha, message: { headline }, fileChanges,
         } },
       }),
@@ -355,7 +357,7 @@ export async function remoteRepository(input: string, ref: string): Promise<Repo
     return saved
   }
   return {
-    label: address, revision: commit.sha, paths: () => paths,
+    label: address, source: 'github', ref: requestedRef, revision: commit.sha, paths: () => paths,
     read: path => fetchData(raw(path), response => response.text()),
     asset: raw,
     link: path => `https://github.com/${address}/blob/${commit.sha}/${path.split('/').map(encodeURIComponent).join('/')}`,
@@ -392,7 +394,7 @@ export function exampleRepository(): Repository {
   const files = Object.fromEntries(Object.entries(import.meta.glob('../example-workspace/**/*.{yaml,md}', { eager: true, query: '?raw', import: 'default' }))
     .map(([path, data]) => [path.replace('../example-workspace/', ''), data as string]))
   return {
-    label: 'Example repository',
+    label: 'Example repository', source: 'example',
     paths: () => [...Object.keys(files), ...Object.keys(assets)],
     async read(path) { return files[path] },
     asset: path => assets[path],

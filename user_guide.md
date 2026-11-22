@@ -6,8 +6,12 @@ Trendly loads the host site's configuration, Markdown posts, drafts, and media f
 
 Run `npm ci` and `npm run dev` from the Trendly project folder and open the address Vite prints. On Windows PowerShell, use `npm.cmd` in place of `npm` if necessary. The app opens an example repository so you can try it immediately.
 
-- **Open folder** selects a checkout from your computer. Choose the folder containing `mndsite.yaml`. Chrome and Edge can reread the selected folder and check for changes while the tab is visible. In Firefox, choose the folder again after editing files to import a fresh snapshot.
-- **Open GitHub** accepts a public repository as `owner/repository` or its GitHub URL. You can enter a branch, tag, or commit. Trendly shows the commit it loaded. For a private repository, use a local checkout.
+- **Open folder** selects a checkout from your computer. Choose the folder containing `mndsite.yaml`. In Chrome and Edge, **Live local checkout** checks the working tree about every two seconds while the tab is visible and checks again when you return to the tab. Keep editing the same checkout with your editor or agent. In Firefox, **Imported snapshot** shows the selected files. Use **Reopen folder** after saving edits.
+- **Open GitHub** accepts a public repository as `owner/repository` or its GitHub URL. Enter a branch, tag, or commit, or leave the ref blank for the default branch. Trendly reads the posts, media, and config from one commit and shows the ref and commit in the sidebar. Use **Refresh** to resolve a branch again. For a private repository, use a local checkout.
+
+### Save to GitHub
+
+Browsing public repositories requires no token. To save a supported change from a branch, paste a personal access token in the save dialog. A fine-grained token should grant **Contents** read and write access to the selected repository. Trendly sends the token directly to GitHub for that operation. It submits a commit against the loaded branch head, so a concurrent push requires you to refresh and review the change again. GitHub branch protection still applies. Tags and commit SHAs open for browsing. [GitHub token permissions](https://docs.github.com/en/rest/repos/contents#create-or-update-file-contents) · [GitHub commit API](https://docs.github.com/en/graphql/reference/commits#createcommitonbranch)
 
 ## Browse and preview
 
@@ -36,7 +40,7 @@ With a read-only folder import, clicking the **Save changes** link starts the do
 
 ## Update or publish a post
 
-Edit Markdown files in the repository, then return to Trendly and refresh.
+Edit Markdown files in the repository. A live local checkout updates after the files are saved. For an imported snapshot, reopen the folder.
 
 The **Publish** and **Unpublish** buttons in **Site feed** change the preview in Trendly for the open workspace session. **Save changes** updates the `drafts` list in `mndsite.yaml` for posts in the content directory. You can save directly from Site feed. In the example workspace, try selecting **Publish** on **A quieter reading list**. mndsite builds with draft-list support omit entries in the draft list from the public site and RSS after a rebuild.
 

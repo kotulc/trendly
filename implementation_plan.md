@@ -28,7 +28,7 @@ The initial explorer, standalone mndsite feed and RSS export, and Trendly previe
 
 - Mount the shared feed view inside Trendly. Use working-tree files for local preview and the selected commit for remote browsing. Show which folder or repository revision is open so the user can tell what they are reviewing.
 - Show drafts from `drafts/` and content files listed in `mndsite.yaml` in Posts and Site feed. Keep draft bodies and draft-only assets out of the generated site and its feed data.
-- Start with **Refresh** where a browser retains a directory handle. In Firefox, reselect the folder for an updated snapshot. For automatic refresh on file saves, extend mndsite's existing development watcher and dev preview to pick up post, feed configuration, and relevant asset changes. Keep that workflow optional and independent of the static browser app.
+- A live local checkout uses the browser's directory handle to check for Markdown, YAML, and asset changes while the tab is visible. It checks again when the tab becomes visible and keeps the last loaded snapshot if a scan fails during an edit. Browsers that import a folder snapshot can reload it with **Reopen folder**. mndsite's development watcher can remain independent.
 - Give Herder and other agents the repository layout and frontmatter conventions. An author or agent can create, edit, and promote posts through normal file operations and Git. Consider MCP only if a concrete workflow needs a notification beyond refresh or watch.
 - The current Posts actions can move Markdown between the draft and content trees in one GitHub commit. Section 7 replaces the file move in the publication workflow with a config change. Check the expected branch head before writing and let the existing push workflow deploy the commit.
 - Use the Site feed switches to change preview publication states immediately in the open workspace session. Offer an optional save that writes pending changes for posts in the content tree to the repository's draft list. mndsite applies the saved list during ingestion so excluded posts stay available in Trendly and are omitted from the public build.
@@ -94,6 +94,8 @@ publication:
 **Exit check.** Start with an undated Markdown post under `drafts/`. In Trendly, preview publication, set its route and date, and save. Build with mndsite and verify the page, expandable feed, and RSS. Unpublish and rebuild, then republish and verify the same URL and RSS GUID. Check that the source Markdown path and bytes stay the same throughout and that a stale GitHub branch produces a recoverable save conflict.
 
 ## Later
+
+For a hosted **Sign in with GitHub** flow, consider a GitHub App with repository-scoped Contents permissions and a server-side callback to exchange the authorization code and manage short-lived user tokens. The static app can send a user-supplied token directly to the GitHub commit API today. Public repository reads can remain anonymous. [GitHub App user authorization](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app)
 
 Consider an **Updated** tag and filter for posts with a substantive revision after first publication. An updated post could show its last revision date and keep its original publication date, permalink, and RSS item ID. A published post could also show a pending revision while readers continue to see the last published version. **Archived** can coexist with revision status. Apply revision labels only when revision metadata is available.
 
