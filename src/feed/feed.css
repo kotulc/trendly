@@ -106,6 +106,20 @@
 .mnd-feed-excerpt { margin: 0; color: var(--feed-muted); font-size: .9375rem; line-height: 1.55; }
 .mnd-feed-facet { border-radius: .375rem; padding: .12rem .42rem; font-weight: 550; font-size: .75rem; line-height: 1.45; background: hsl(var(--facet-hue, 215) 75% 94%); color: hsl(var(--facet-hue, 215) 50% 29%); }
 .dark .mnd-feed-facet { background: hsl(var(--facet-hue, 215) 55% 43% / .25); color: hsl(var(--facet-hue, 215) 70% 78%); }
+.mnd-feed :is([data-status], [data-next-status]) {
+  --status-hue: var(--facet-hue, 218);
+  --status-saturation: 34%;
+  --status-fill: hsl(var(--status-hue) var(--status-saturation) 93%);
+  --status-ink: hsl(var(--status-hue) var(--status-saturation) 29%);
+}
+.dark .mnd-feed :is([data-status], [data-next-status]) {
+  --status-fill: hsl(var(--status-hue) var(--status-saturation) 21%);
+  --status-ink: hsl(var(--status-hue) var(--status-saturation) 80%);
+}
+.mnd-feed :is([data-status="published"], [data-next-status="published"]) { --status-hue: 218; }
+.mnd-feed :is([data-status="draft"], [data-next-status="draft"]) { --status-hue: 254; }
+.mnd-feed [data-status="archived"] { --status-hue: 225; --status-saturation: 14%; }
+.mnd-feed .mnd-feed-facet[data-status] { background: var(--status-fill); color: var(--status-ink); }
 .mnd-feed-tags {
   --feed-tag-height: 1.15rem;
   --feed-tag-gap: .25rem;
@@ -129,7 +143,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.mnd-feed-draft { --facet-hue: 35; }
 .mnd-feed-body { padding: 1.125rem; border-top: 1px solid var(--feed-border); overflow-wrap: anywhere; }
 .mnd-feed-prose { font-size: 1rem; line-height: 1.75; }
 .mnd-feed-prose > * + *, .mnd-feed-prose :where(div, section) > * + * { margin-top: .9rem; }
@@ -156,7 +169,6 @@
 .mnd-feed-inline-media { display: block; padding: .75rem 1rem; border: 1px solid var(--feed-border); border-radius: .25rem; background: var(--feed-panel); }
 .mnd-feed-player { display: block; grid-column: 1 / -1; }
 .mnd-feed-player:empty { display: none; }
-.mnd-feed-player button { display: block; width: fit-content; margin-top: .35rem; padding: .24rem .5rem; border: 1px solid var(--feed-border); border-radius: .35rem; background: var(--feed-soft); color: var(--feed-accent); font: inherit; font-size: .875rem; cursor: pointer; }
 .mnd-feed-player :is(iframe, audio, video) { display: block; width: 100%; margin-top: .55rem; }
 .mnd-feed-player video { max-height: 70vh; background: #000; }
 .mnd-feed-player iframe { border: 0; aspect-ratio: 16 / 9; }

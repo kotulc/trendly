@@ -16,13 +16,13 @@ Search from the header to filter the current view. Press `/` to focus the search
 In **Posts** and **Site feed**, select a publisher or citation in the sidebar to filter the cards. Select **All publishers** to clear that filter.
 
 - **Posts** shows the repository's Markdown. Search the text or filter by tag or status. Tags and metadata chips such as `essay` appear beside the media chip in lowercase, with spaces between words. Select the `draft` tag to see unpublished posts. Select a post to open it at full column width and see its summary and content.
-- **Site feed** starts with every post in the open repository and uses the same filters as Posts. Select a card's **Published** or **Unpublished** switch to change its preview immediately. Select **Save changes** when you want to keep publication changes for posts in the site's content directory.
+- **Site feed** starts with every post in the open repository and uses the same filters as Posts. Each card shows **Draft** or **Published** and also shows **Archived** when applicable. Use the status filter to find posts with any of those statuses. Select **Publish** or **Unpublish** on a card to change its preview immediately. Select **Save changes** when you want to keep publication changes for posts in the site's content directory.
 - **External feeds** reads RSS and Atom subscriptions from `feeds.yaml`. Select a subscription in the sidebar, search, filter by tags provided by the feed or by media type, and sort newest or oldest first.
 - **Sources** lists feeds by URL. Filter by subscription status or format, and sort by name or feed entry count. Expand a feed card to edit its subscription or inspect a loading error.
 
 ## View media in expanded cards
 
-Expand a card to see inline images and audio or video controls. Use **Play video** for a YouTube or Vimeo embed, or **Open audio player** or **Open video player** for attached media. Playback depends on the browser's file format support and whether the publisher makes the media available to other sites. **Open full post** takes you to the publisher's page when the feed has only an excerpt or playback is blocked.
+Expanding a card loads its images, attached audio and video players, and supported YouTube and Vimeo embeds. Use the player's controls to start playback. Playback depends on the browser's file format support and whether the publisher makes the media available to other sites. **Open full post** takes you to the publisher's page when the feed has only an excerpt or playback is blocked.
 
 For your own Markdown posts, use `![Description](photo.jpg)` for an image and `[Watch the clip](clip.mp4 "embed")` for a player. You can use a repository-relative media file or a public URL.
 
@@ -38,7 +38,7 @@ With a read-only folder import, clicking the **Save changes** link starts the do
 
 Edit Markdown files in the repository, then return to Trendly and refresh.
 
-The **Site feed** switches change the preview in Trendly for the open workspace session. **Save changes** updates the `drafts` list in `mndsite.yaml` for posts in the content directory. You can save directly from Site feed. In the example workspace, try marking **A quieter reading list** as **Published**. mndsite builds with draft-list support omit entries in the draft list from the public site and RSS after a rebuild.
+The **Publish** and **Unpublish** buttons in **Site feed** change the preview in Trendly for the open workspace session. **Save changes** updates the `drafts` list in `mndsite.yaml` for posts in the content directory. You can save directly from Site feed. In the example workspace, try selecting **Publish** on **A quieter reading list**. mndsite builds with draft-list support omit entries in the draft list from the public site and RSS after a rebuild.
 
 Files in the separate `drafts/` directory publish by moving into the configured content directory. Trendly can commit that move from **Posts** on a writable GitHub branch. In a local checkout, move the Markdown into the content directory. Drafts in public repositories remain visible on GitHub. Keep draft-only assets outside the published asset directories. A post needs a valid date and a path under the configured feed section to appear in the public feed.
 

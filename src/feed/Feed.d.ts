@@ -39,6 +39,7 @@ export function FeedCard(props: {
   tags?: React.ReactNode
   excerpt?: string
   open: boolean
+  focusOnOpen?: boolean
   toggle: () => void
   children: React.ReactNode
 }): React.JSX.Element

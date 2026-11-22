@@ -35,7 +35,7 @@ When running `npm run dev`, Trendly can read NPR podcast feeds such as Planet Mo
 
 Use `description` for the card excerpt and `site` for a publication label. The first source determines the media icon from its type or URL. Status, categories, and tags appear as chips. Add other fields under `frontmatter.facets` in `mndsite.yaml`. Trendly also uses the configured tags and status for the Posts filters.
 
-In Markdown, use standard image syntax and give a YouTube, Vimeo, or direct audio or video link the title `"embed"` to show a click-to-load player. Source metadata also accepts `audio_url` and `video_url` for direct media files. Set `placement: inline` on the corresponding source entry when the body already contains the player.
+In Markdown, use standard image syntax and give a YouTube, Vimeo, or direct audio or video link the title `"embed"` to show a player when the card expands. Source metadata also accepts `audio_url` and `video_url` for direct media files. Set `placement: inline` on the corresponding source entry when the body already contains the player.
 
 Expanded RSS and Atom cards show images and native audio and video from feed content. They also read media enclosures and recognize YouTube and Vimeo embeds. The feed must supply a media file, an image URL, or a supported embed. For feeds that publish excerpts, use **Open full post** to see media that appears only on the publisher's page.
 

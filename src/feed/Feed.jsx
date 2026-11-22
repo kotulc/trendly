@@ -1,4 +1,4 @@
-import { createElement, Fragment, useEffect, useRef, useState } from 'react'
+import { createElement, Fragment, useLayoutEffect, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { normalize_tags } from './card-meta.mjs'
@@ -41,12 +41,13 @@ function ExternalContent({ content, text }) {
     if (tag === 'img') {
       const src = web_url(node.getAttribute('src'), content.base) || web_url(node.getAttribute('data-src'), content.base)
       const alt = node.getAttribute('alt') || ''
-      return src ? <img key={key} src={src.href} alt={alt} loading="lazy" referrerPolicy="no-referrer" /> : alt
+      return src ? <img key={key} src={src.href} alt={alt} referrerPolicy="no-referrer" /> : alt
     }
     if (tag === 'audio' || tag === 'video') {
-      const src = web_url(node.getAttribute('src'), content.base)
+      const src = web_url(node.getAttribute('src'), content.base) || web_url(node.getAttribute('data-src'), content.base)
       const sources = src ? [{ src: src.href }] : [...node.children].flatMap(child => {
-        const url = child.localName === 'source' && web_url(child.getAttribute('src'), content.base)
+        const url = child.localName === 'source' && (web_url(child.getAttribute('src'), content.base) ||
+          web_url(child.getAttribute('data-src'), content.base))
         return url ? [{ src: url.href, type: child.getAttribute('type') || undefined }] : []
       })
       if (sources.length) return <NativeMedia key={key} kind={tag} sources={sources}
@@ -83,7 +84,7 @@ function youtube_id(url) {
 
 function hosted_video(url) {
   const youtube = youtube_id(url)
-  if (youtube) return { provider: 'youtube', src: `https://www.youtube-nocookie.com/embed/${youtube}?autoplay=1`,
+  if (youtube) return { provider: 'youtube', src: `https://www.youtube-nocookie.com/embed/${youtube}`,
     href: `https://www.youtube.com/watch?v=${youtube}` }
   const host = url.hostname.replace(/^www\./, '')
   const match = host === 'vimeo.com' ? /^\/(\d+)(?:\/([\w-]+))?\/?$/.exec(url.pathname)
@@ -91,7 +92,7 @@ function hosted_video(url) {
   if (!match) return null
   const [, id, path_hash] = match
   const hash = path_hash || url.searchParams.get('h')
-  const params = new URLSearchParams({ autoplay: '1', dnt: '1' })
+  const params = new URLSearchParams({ dnt: '1' })
   if (hash && /^[\w-]+$/.test(hash)) params.set('h', hash)
   return { provider: 'vimeo', src: `https://player.vimeo.com/video/${id}?${params}`, href: `https://vimeo.com/${id}${params.has('h') ? `/${hash}` : ''}` }
 }
@@ -120,11 +121,65 @@ export function entryMediaType(entry) {
   return post_type(entry, source, web_url(source?.url))
 }
 
+function reveal_offset({ top, bottom }, inset) {
+  if (top < inset) return top - inset
+  return Math.max(0, Math.min(bottom - window.innerHeight, top - inset))
+}
+
+function reveal_as_it_resizes(element, header, bounds = () => element.getBoundingClientRect()) {
+  let frame = 0
+  let destination
+  const interaction = new AbortController()
+  const observer = new ResizeObserver(() => {
+    const inset = parseFloat(getComputedStyle(header).scrollMarginTop) || 0
+    const start = window.scrollY
+    const max = document.scrollingElement.scrollHeight - window.innerHeight
+    const target = Math.max(0, Math.min(max, start + reveal_offset(bounds(inset), inset)))
+    if (target === destination) return
+    cancelAnimationFrame(frame)
+    destination = target
+    const distance = target - start
+    if (Math.abs(distance) < 1) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      window.scrollTo({ top: target, behavior: 'instant' })
+      return
+    }
+
+    const duration = Math.min(700, 320 + Math.abs(distance) * .5)
+    const started = performance.now()
+    let last_position = start
+    function animate(now) {
+      if (Math.abs(window.scrollY - last_position) > 1) {
+        stop()
+        return
+      }
+      const progress = Math.min(1, (now - started) / duration)
+      const eased = progress * progress * (3 - 2 * progress)
+      window.scrollTo({ top: start + distance * eased, behavior: 'instant' })
+      last_position = window.scrollY
+      if (progress < 1) frame = requestAnimationFrame(animate)
+    }
+    frame = requestAnimationFrame(animate)
+  })
+
+  function stop() {
+    cancelAnimationFrame(frame)
+    observer.disconnect()
+    interaction.abort()
+  }
+
+  for (const event of ['wheel', 'touchmove', 'pointerdown', 'keydown']) {
+    window.addEventListener(event, stop, { passive: true, capture: true, signal: interaction.signal })
+  }
+  observer.observe(element)
+  return stop
+}
+
 function NativeMedia({ kind, sources, poster, title }) {
   const Element = kind === 'video' ? 'video' : 'audio'
   const single = sources.length === 1 && !sources[0].type
   return <span className="mnd-feed-player">
-    <Element src={single ? sources[0].src : undefined} controls preload="none"
+    <Element src={single ? sources[0].src : undefined} controls preload="metadata"
       aria-label={title || (kind === 'video' ? 'Video player' : 'Audio player')}
       {...(kind === 'video' && { playsInline: true, poster })}>
       {!single && sources.map(({ src, type }, index) => <source key={index} src={src} type={type} />)}
@@ -134,12 +189,10 @@ function NativeMedia({ kind, sources, poster, title }) {
 }
 
 function MediaPlayer({ kind, src, embed, poster, title }) {
-  const [playing, set_playing] = useState(false)
-  if (playing && src && !embed) return <NativeMedia kind={kind} sources={[{ src }]} poster={poster} title={title} />
+  if (!embed) return <NativeMedia kind={kind} sources={[{ src }]} poster={poster} title={title} />
   return <span className="mnd-feed-player">
-    {playing && embed ? <iframe src={embed.src} title={title || media_labels[embed.provider]}
-      allow="autoplay; encrypted-media; picture-in-picture" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen />
-      : <button type="button" onClick={() => set_playing(true)}>{embed ? 'Play video' : `Open ${kind} player`}</button>}
+    <iframe src={embed.src} title={title || media_labels[embed.provider]}
+      allow="encrypted-media; picture-in-picture" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen />
   </span>
 }
 
@@ -162,8 +215,8 @@ function SourceCard({ source }) {
         <a href={url.href} target="_blank" rel="noreferrer">{source.title || domain}</a>
         {source.description && <p>{source.description}</p>}
       </div>
-      {image && !full_image && <img className="mnd-feed-thumb" src={image.href} alt="" loading="lazy" referrerPolicy="no-referrer" />}
-      {full_image && <img className="mnd-feed-source-image" src={full_image.href} alt={source.title || ''} loading="lazy" referrerPolicy="no-referrer" />}
+      {image && !full_image && <img className="mnd-feed-thumb" src={image.href} alt="" referrerPolicy="no-referrer" />}
+      {full_image && <img className="mnd-feed-source-image" src={full_image.href} alt={source.title || ''} referrerPolicy="no-referrer" />}
       {source.placement !== 'inline' && <>
         {(embed || video) && <MediaPlayer kind="video" src={video?.href} embed={embed} poster={image?.href} title={source.title} />}
         {audio && <MediaPlayer kind="audio" src={audio.href} title={source.title} />}
@@ -185,15 +238,38 @@ function PostLink({ href, title, children, external, resolve_media }) {
   </span>
 }
 
-function FacetChip({ facet: { label, hue, value } }) {
+function FacetChip({ facet: { name, label, hue, value } }) {
   return <span className="mnd-feed-facet" title={`${label}: ${value}`}
+    data-status={name === 'status' ? value.toLowerCase() : undefined}
     style={hue === undefined ? undefined : { '--facet-hue': hue }}>{value}</span>
 }
 
-export function FeedCard({ title, meta, tags, badge, excerpt, open, toggle, children }) {
+export function FeedCard({ title, meta, tags, badge, excerpt, open, focusOnOpen, toggle, children }) {
+  const summary = useRef(null)
+
+  useLayoutEffect(() => {
+    if (!open) return
+    const header = summary.current
+    if (focusOnOpen) header.focus({ preventScroll: true })
+
+    const card = header.parentElement
+    return reveal_as_it_resizes(card, header, inset => {
+      const rect = card.getBoundingClientRect()
+      const available = window.innerHeight - inset
+      if (rect.height <= available) return rect
+
+      const media = card.querySelector('.mnd-feed-body :is(.mnd-feed-player, img:not(.mnd-feed-thumb))')
+      const media_rect = media?.getBoundingClientRect()
+      if (!media_rect?.height) return rect
+      // Keep the title and media together when they can share the viewport.
+      return media_rect.bottom - rect.top <= available ? { top: rect.top, bottom: media_rect.bottom } : media_rect
+    })
+  }, [open, focusOnOpen])
+
   return <details className="mnd-feed-entry" open={open}>
-    <summary className="mnd-feed-summary" onClick={event => {
+    <summary ref={summary} className="mnd-feed-summary" onClick={event => {
       event.preventDefault()
+      if (!open) event.currentTarget.focus({ preventScroll: true })
       toggle()
     }}>
       <span className="mnd-feed-info">
@@ -210,17 +286,20 @@ export function FeedCard({ title, meta, tags, badge, excerpt, open, toggle, chil
   </details>
 }
 
-function Post({ entry, open, toggle, default_source, resolve_image, resolve_link, publication_controls }) {
+function Post({ entry, open, focus_on_open, toggle, default_source, resolve_image, resolve_link, publication_controls }) {
   const first_source = entry.sources?.[0]
   const source_url = web_url(first_source?.url)
   const first_host = source_url?.hostname.replace(/^www\./, '')
   const site = entry.site || entry.origin || first_source?.publisher || first_host || default_source
   const kind = entryMediaType(entry)
   const [type_label, icon] = post_icons[kind]
-  const chips = (entry.facets || []).flatMap(facet => normalize_tags(facet.values)
-    .filter(value => (facet.name !== 'status' || !['draft', 'published', 'unpublished'].includes(value)) &&
-      (!entry.draft || value !== 'draft'))
-    .map(value => ({ ...facet, value })))
+  const facets = entry.facets || []
+  const chips = publication_controls
+    ? facets.filter(facet => facet.name === 'status').flatMap(facet => facet.values.map(value => ({ ...facet, value })))
+    : facets.flatMap(facet => normalize_tags(facet.values)
+      .filter(value => (facet.name !== 'status' || !['draft', 'published', 'unpublished'].includes(value)) &&
+        (!entry.draft || value !== 'draft'))
+      .map(value => ({ ...facet, value })))
   const show_draft_chip = entry.draft && !publication_controls
   const publication = entry.date && (!entry.draft || publication_controls)
     ? <time className="mnd-feed-publication" dateTime={entry.date}>{!publication_controls && 'Published '}{entry.date}</time>
@@ -234,12 +313,12 @@ function Post({ entry, open, toggle, default_source, resolve_image, resolve_link
     return resolve_link?.(url, entry) || ''
   }
   return (
-    <FeedCard title={entry.title} excerpt={entry.summary} open={open} toggle={toggle} meta={<>
+    <FeedCard title={entry.title} excerpt={entry.summary} open={open} focusOnOpen={focus_on_open} toggle={toggle} meta={<>
       {site && <span className="mnd-feed-site" title={site}>{site}</span>}
       {publication}
     </>} tags={(show_draft_chip || chips.length > 0) && (
       <span className="mnd-feed-tags">
-        {show_draft_chip && <span className="mnd-feed-facet mnd-feed-draft">draft</span>}
+        {show_draft_chip && <FacetChip facet={{ name: 'status', label: 'Status', value: 'draft' }} />}
         {chips.map(facet => <FacetChip key={`${facet.name}:${facet.value}`} facet={facet} />)}
       </span>
     )} badge={!publication_controls && <span className="mnd-feed-type" data-media={kind}>
@@ -270,19 +349,12 @@ function Post({ entry, open, toggle, default_source, resolve_image, resolve_link
 
 export default function Feed({ entries, defaultSource, resolveImage, resolveLink, renderAction, initialExpanded, publicationControls }) {
   const [expanded, set_expanded] = useState(initialExpanded ?? null)
-  const feed = useRef(null)
-
-  useEffect(() => {
-    if (!initialExpanded) return
-    const summary = feed.current?.querySelector('.mnd-feed-entry[open] > summary')
-    summary?.focus({ preventScroll: true })
-    summary?.scrollIntoView({ block: 'nearest' })
-  }, [initialExpanded])
 
   return (
-    <div className={publicationControls ? 'mnd-feed state-card-list' : 'mnd-feed'} ref={feed}>
+    <div className={publicationControls ? 'mnd-feed state-card-list' : 'mnd-feed'}>
       {entries.map(entry => {
         const post = <Post key={entry.id} entry={entry} open={expanded === entry.id}
+          focus_on_open={initialExpanded === entry.id}
           toggle={() => set_expanded(current => current === entry.id ? null : entry.id)}
           default_source={defaultSource} resolve_image={resolveImage} resolve_link={resolveLink}
           publication_controls={publicationControls} />

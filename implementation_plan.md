@@ -2,7 +2,7 @@
 
 Build Trendly as a lightweight host-site workspace and feed reader with a Pages CMS–style interface. The open repository supplies the host site's Markdown posts, drafts, media, and YAML configuration. Editing happens in an external editor or agent. Trendly commits publication changes on a GitHub branch, and the repository's existing Git and mndsite workflow handles deployment.
 
-The initial explorer, standalone mndsite feed and RSS export, and Trendly preview are implemented. The two apps build independently using matching copies of the portable feed view. Sections 5 and 6 cover additional feed formats, indexed search, and server-side feed fetching.
+The initial explorer, standalone mndsite feed and RSS export, and Trendly preview are implemented. The two apps build independently using matching copies of the portable feed view. Sections 5 and 6 cover additional feed formats, indexed search, and server-side feed fetching. Section 7 plans a shared publication workflow for Markdown posts that stay at their original paths.
 
 ## 1. Replace the authoring shell with a repository explorer
 
@@ -27,10 +27,10 @@ The initial explorer, standalone mndsite feed and RSS export, and Trendly previe
 ## 3. Bring the same feed into Trendly's working preview
 
 - Mount the shared feed view inside Trendly. Use working-tree files for local preview and the selected commit for remote browsing. Show which folder or repository revision is open so the user can tell what they are reviewing.
-- Keep drafts outside the published content and asset inputs. List them in Posts and let authors opt into seeing them in Site feed. Keep draft bodies and draft-only files out of the generated site and its feed data.
+- Show drafts from `drafts/` and content files listed in `mndsite.yaml` in Posts and Site feed. Keep draft bodies and draft-only assets out of the generated site and its feed data.
 - Start with **Refresh** where a browser retains a directory handle. In Firefox, reselect the folder for an updated snapshot. For automatic refresh on file saves, extend mndsite's existing development watcher and dev preview to pick up post, feed configuration, and relevant asset changes. Keep that workflow optional and independent of the static browser app.
 - Give Herder and other agents the repository layout and frontmatter conventions. An author or agent can create, edit, and promote posts through normal file operations and Git. Consider MCP only if a concrete workflow needs a notification beyond refresh or watch.
-- On a GitHub branch, expose Publish and Unpublish as a single commit that moves the Markdown between the draft and content trees. Check the expected branch head before writing and let the existing push workflow deploy the commit.
+- The current Posts actions can move Markdown between the draft and content trees in one GitHub commit. Section 7 replaces the file move in the publication workflow with a config change. Check the expected branch head before writing and let the existing push workflow deploy the commit.
 - Use the Site feed switches to change preview publication states immediately in the open workspace session. Offer an optional save that writes pending changes for posts in the content tree to the repository's draft list. mndsite applies the saved list during ingestion so excluded posts stay available in Trendly and are omitted from the public build.
 - Use the same post filters and counts in Posts and Site feed. Show drafts by default in the working feed. Save feed settings through their controls. Offer YAML review as an optional preview for configuration changes.
 
@@ -62,6 +62,39 @@ The initial explorer, standalone mndsite feed and RSS export, and Trendly previe
 
 **Exit check.** On a deployed Trendly instance, subscribe to Planet Money and verify that it loads in **External feeds** and its episodes appear in indexed search. Edit and unpublish a host post, then verify that search reflects both changes. Stop the service and check that local post search and directly accessible feeds still work.
 
+## 7. Publish Markdown in place with Trendly and mndsite
+
+### Shared publication settings
+
+- Keep Markdown and media in Git. Define a publication map in `mndsite.yaml`, keyed by repository-relative Markdown path. Each entry can record publication status, a public route, and a publication date. The source path identifies the file for editing. The route identifies the public page and supplies its RSS permalink.
+- Preserve existing defaults. Entries in the content tree are published by default, with paths in the existing `drafts` list treated as drafts. Entries under `drafts/` start as drafts. An explicit publication entry takes precedence in either location. Existing routes remain stable. On first publication from `drafts/`, suggest a route under the configured feed section and use the post's date or let the user set one. Keep the route and publication date when the post returns to draft so republishing restores its URL and RSS GUID.
+- Define the defaults and validation with one resolver and shared fixtures for both tools. Validate source paths, public routes, and route collisions against the assembled site. Report cases where a post can appear as a public page but is outside the RSS section or lacks a valid date.
+
+Illustrative configuration for publishing the original example path in place:
+
+```yaml
+publication:
+  drafts/working-notes.md:
+    status: published
+    route: posts/working-notes
+    published_at: 2026-11-21
+```
+
+### Trendly's authoring workflow
+
+- Use the same publication state in Posts and Site feed. Publish or unpublish with a single click in the working preview, with optional **Save changes** and **Discard changes** for the whole pending set. Give the user route and date controls when needed and show how the post will appear on the site and in RSS. Offer the YAML preview in settings.
+- Save one config update per batch. Write to an authorized local folder or commit to the selected writable GitHub branch with its expected head. Offer a config export for read-only folder imports. Keep pending edits available after a save conflict. Track preview, saved repository revision, and deployed revision as separate states so a successful config save is visible before the build completes.
+
+### mndsite's static build and rollout
+
+- Resolve the saved publication map during ingest and build pages, navigation, search metadata, the expandable feed, and RSS from the resulting published entries. Ingest explicitly published files from `drafts/` at their configured routes. Resolve relative links and media from the Markdown source directory and include the assets referenced by published entries. Keep unpublished content and draft-only assets out of the public output.
+- Include the built Git revision in static site metadata when available. Trendly can compare it with the saved revision on the deployment branch and show when the public build has caught up.
+- Ship support in mndsite first with fixtures for existing layouts. Update the builder version used by consuming sites, then enable the in-place workflow in Trendly. Keep mndsite buildable from Git and YAML on its own. Existing Git push workflows can build and deploy the generated static files.
+
+**Exit check.** Start with an undated Markdown post under `drafts/`. In Trendly, preview publication, set its route and date, and save. Build with mndsite and verify the page, expandable feed, and RSS. Unpublish and rebuild, then republish and verify the same URL and RSS GUID. Check that the source Markdown path and bytes stay the same throughout and that a stale GitHub branch produces a recoverable save conflict.
+
 ## Later
+
+Consider an **Updated** tag and filter for posts with a substantive revision after first publication. An updated post could show its last revision date and keep its original publication date, permalink, and RSS item ID. A published post could also show a pending revision while readers continue to see the last published version. **Archived** can coexist with revision status. Apply revision labels only when revision metadata is available.
 
 Revisit authenticated remote repositories, richer feed filtering, offline caching, and automatic refresh after the read path and standalone publishing work well. Semantic search and social integrations remain deferred.

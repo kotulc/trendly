@@ -16,6 +16,22 @@ type SettingsEdit<T> = { original: T; value: T }
 
 const mediaLabels = { article: 'Article', audio: 'Audio', video: 'Video', image: 'Image', link: 'Link' }
 const feedFormatLabels: Record<FeedFormat, string> = { rss: 'RSS', atom: 'Atom' }
+const postStatuses = ['Archived', 'Draft', 'Published']
+
+function withPostStatus(post: FeedEntry): FeedEntry {
+  const facets = post.facets ?? []
+  const status = facets.find(facet => facet.name === 'status')
+  const values = new Set([post.draft ? 'Draft' : 'Published'])
+  for (const value of status?.values ?? []) {
+    const normalized = value.toLowerCase()
+    if (['draft', 'published', 'unpublished'].includes(normalized)) continue
+    values.add(normalized === 'archived' ? 'Archived' : value)
+  }
+  return { ...post, facets: [
+    { name: 'status', label: 'Status', hue: 35, ...status, values: [...values] },
+    ...facets.filter(facet => facet.name !== 'status'),
+  ] }
+}
 
 function byDate(direction: 'newest' | 'oldest') {
   return (a: FeedEntry, b: FeedEntry) => {
@@ -271,7 +287,7 @@ export function App() {
       ? [[post.path, draft] as const] : []
   }))
   const feedChanges = !!feedSettingsEdit || draftChanges.size > 0
-  const posts = page === 'preview' && previewDrafts.size > 0 ? savedPosts.map(post => {
+  const previewPosts = page === 'preview' && previewDrafts.size > 0 ? savedPosts.map(post => {
     const draft = previewDrafts.get(post.id)
     if (draft === undefined || draft === !!post.draft) return post
     const tags = post.tags.filter(tag => tag !== 'draft')
@@ -283,6 +299,7 @@ export function App() {
     }
     return { ...post, draft, tags, facets, href: draft ? undefined : post.href }
   }) : savedPosts
+  const posts = previewPosts.map(withPostStatus)
   const query = search.trim().toLowerCase()
   const facet = (entry: FeedEntry, name: string) => entry.facets?.find(item => item.name === name)?.values || []
   const matches = (entry: FeedEntry) => !query ||
@@ -323,7 +340,9 @@ export function App() {
   const activity = feedEntries.filter(matchesFilters).sort(byDate(dateOrder))
   const filterEntries = page === 'feeds' ? feedEntries : posts
   const availableTags = [...new Set(filterEntries.flatMap(entry => facet(entry, 'tags')))].sort()
-  const availableStatuses = [...new Set(filterEntries.flatMap(entry => facet(entry, 'status')))].sort()
+  const availableStatuses = [...new Set([
+    ...(repositoryPage ? postStatuses : []), ...filterEntries.flatMap(entry => facet(entry, 'status')),
+  ])].sort()
   const sources = new Map<string, FeedSource>()
   function feedSource(key: string, url?: string) {
     const source = sources.get(key) ?? { url, subscriptions: [], removed: [] }
@@ -667,12 +686,13 @@ export function App() {
               initialExpanded={page === 'posts' ? linkedPost : undefined} defaultSource={data.snapshot.title}
               resolveImage={(value, entry) => repoAsset(data.repo, value, entry)}
               publicationControls={page === 'preview'}
-              renderAction={page === 'preview' ? entry =>
-                <button className="button state-toggle" type="button" role="switch" aria-checked={!entry.draft}
-                  aria-label={`${entry.title} publication`} disabled={busy}
+              renderAction={page === 'preview' ? entry => {
+                const action = entry.draft ? 'Publish' : 'Unpublish'
+                return <button className="button state-toggle" type="button" data-next-status={entry.draft ? 'published' : 'draft'}
+                  aria-label={`${action} ${entry.title}`} disabled={busy}
                   title={entry.draft ? 'Preview as published' : 'Preview as unpublished'}
-                  onClick={() => togglePreviewPublication(entry.id)}>{entry.draft ? 'Unpublished' : 'Published'}</button>
-              : data.repo.publication ? entry =>
+                  onClick={() => togglePreviewPublication(entry.id)}>{action}</button>
+              } : data.repo.publication ? entry =>
                 <button className="button post-action" disabled={busy} onClick={() => preparePublication(entry)}
                   title={entry.draft ? 'Publish' : 'Unpublish'} aria-label={`${entry.draft ? 'Publish' : 'Unpublish'} ${entry.title}`}>
                   {entry.draft ? <ArrowUpToLine size={15} aria-hidden="true" /> : <ArrowDownToLine size={15} aria-hidden="true" />}
