@@ -202,7 +202,7 @@ function SourceCard({ source }) {
   const direct = media_file_type(url.pathname)
   const audio = web_url(source.audio_url) || (direct === 'audio' && !source.video_url ? url : null)
   const video = web_url(source.video_url) || (direct === 'video' && !source.audio_url ? url : null)
-  const embed = video ? null : hosted_video(url)
+  const embed = hosted_video(video || url)
   const kind = embed?.provider || source.kind || direct
   const image = web_url(source.image_url)
   const full_image = kind === 'image' && !audio && !video && !embed && (image || url)
@@ -244,7 +244,7 @@ function FacetChip({ facet: { name, label, hue, value } }) {
     style={hue === undefined ? undefined : { '--facet-hue': hue }}>{value}</span>
 }
 
-export function FeedCard({ title, meta, tags, badge, excerpt, open, focusOnOpen, toggle, children }) {
+export function FeedCard({ title, meta, tags, badge, excerpt, searchExcerpt, open, focusOnOpen, toggle, children }) {
   const summary = useRef(null)
 
   useLayoutEffect(() => {
@@ -275,6 +275,7 @@ export function FeedCard({ title, meta, tags, badge, excerpt, open, focusOnOpen,
       <span className="mnd-feed-info">
         <span className="mnd-feed-title" title={title}>{title}</span>
         <span className="mnd-feed-meta">{meta}</span>
+        {!open && searchExcerpt && <span className="mnd-feed-search-excerpt">{searchExcerpt}</span>}
       </span>
       {tags}
       {badge}
@@ -313,7 +314,7 @@ function Post({ entry, open, focus_on_open, toggle, default_source, resolve_imag
     return resolve_link?.(url, entry) || ''
   }
   return (
-    <FeedCard title={entry.title} excerpt={entry.summary} open={open} focusOnOpen={focus_on_open} toggle={toggle} meta={<>
+    <FeedCard title={entry.title} excerpt={entry.summary} searchExcerpt={entry.searchExcerpt} open={open} focusOnOpen={focus_on_open} toggle={toggle} meta={<>
       {site && <span className="mnd-feed-site" title={site}>{site}</span>}
       {publication}
     </>} tags={(show_draft_chip || chips.length > 0) && (

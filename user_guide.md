@@ -1,6 +1,6 @@
 # Using Trendly
 
-Trendly loads the host site's configuration, Markdown posts, drafts, and media from the repository you open. It reads RSS and Atom subscriptions from the feed URLs configured in that repository's `feeds.yaml`. Use an external editor or agent to edit posts, and use Trendly to publish or unpublish from a GitHub branch.
+Trendly loads the host site's configuration, Markdown posts, drafts, and media from the repository you open. It reads RSS, Atom, and JSON Feed subscriptions configured in that repository's `feeds.yaml`. Use an external editor or agent to edit posts, and use Trendly to publish or unpublish from a GitHub branch.
 
 ## Open a repository
 
@@ -19,11 +19,13 @@ Browsing public repositories requires no token. To save a supported change from 
 
 Search from the header to filter the current view. Press `/` to focus the search field. In **External feeds** or **Subscriptions**, use **Refresh feeds** to reload subscriptions.
 
+With `npm run dev:full`, searches in **Posts** and **External feeds** can show ranked results and matching excerpts for the example workspace's published posts and Planet Money subscription. Use **Relevance** to return to ranked order after sorting by date. Browser search is available for drafts, other subscriptions, and other workspaces.
+
 In **Posts** and **Site feed**, select a publisher or citation in the sidebar to filter the cards. Select **All publishers** to clear that filter.
 
 - **Posts** shows the repository's Markdown. Search the text or filter by tag or status. Tags and metadata chips such as `essay` appear beside the media chip in lowercase, with spaces between words. Select the `draft` tag to see unpublished posts. Select a post to open it at full column width and see its summary and content.
 - **Site feed** starts with every post in the open repository and uses the same filters as Posts. Each card shows **Draft** or **Published** and also shows **Archived** when applicable. Use the status filter to find posts with any of those statuses. Select **Publish** or **Unpublish** on a card to change its preview immediately. Select **Save changes** when you want to keep publication changes for posts in the site's content directory.
-- **External feeds** reads RSS and Atom subscriptions from `feeds.yaml`. Select a subscription in the sidebar, search, filter by tags provided by the feed or by media type, and sort newest or oldest first.
+- **External feeds** reads RSS, Atom, and JSON Feed subscriptions from `feeds.yaml`. Select a subscription in the sidebar, search, filter by tags provided by the feed or by media type, and sort newest or oldest first.
 - **Subscriptions** lists feeds by URL. Filter by subscription status or format, and sort by name or feed entry count. Expand a feed card to edit its subscription or inspect a loading error.
 
 ## View media in expanded cards
@@ -34,7 +36,7 @@ For your own Markdown posts, use `![Description](photo.jpg)` for an image and `[
 
 ## Edit feed settings and subscriptions
 
-Use **Feed settings** above the Site feed filters to edit the feed section, expandable layout, and public site URL. In **Subscription settings**, set or clear the **Feed proxy URL** for feeds that block direct browser requests. The **mndsite.yaml** and **feeds.yaml** sections open by default and show the saved YAML or a preview of pending changes. Select the filename to collapse the section. **Subscriptions** shows configured subscriptions, the host site's configured RSS URL, and feed citations marked `kind: rss` or `kind: atom` or linked directly to an identifiable feed URL. Use a card's subscription switch or select **Add subscriptions** to enter another feed URL.
+Use **Feed settings** above the Site feed filters to edit the feed section, expandable layout, and public site URL. In **Subscription settings**, set or clear the **Feed proxy URL** for feeds that block direct browser requests. The **mndsite.yaml** and **feeds.yaml** sections open by default and show the saved YAML or a preview of pending changes. Select the filename to collapse the section. **Subscriptions** shows configured subscriptions, the host site's configured RSS URL, and citations marked `kind: rss`, `kind: atom`, or `kind: jsonfeed`, or linked directly to an identifiable feed URL. Use a card's subscription switch or select **Add subscriptions** to enter another feed URL.
 
 Subscription changes take effect in **External feeds** for the current session. You can close either settings dialog and keep editing or browsing. **Save changes** and **Discard changes** are available on the page while edits are pending. Saving applies the settings fields together with pending publication or subscription changes. Local saves use browser write access, and GitHub saves require a token with write access. The config section shows the full YAML file and highlights additions and removals inline. Removing a subscription leaves post citations intact.
 

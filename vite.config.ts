@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
+      ...(process.env.TRENDLY_API_TARGET ? { '/api': process.env.TRENDLY_API_TARGET } : {}),
       '^/_trendly/npr/[0-9]+/podcast\\.xml$': {
         target: 'https://feeds.npr.org',
         changeOrigin: true,

@@ -16,6 +16,7 @@ export type FeedEntry = {
   date?: string
   timestamp?: number
   summary: string
+  searchExcerpt?: string
   body: string
   externalContent?: { html?: string; base: string }
   path: string
@@ -38,6 +39,7 @@ export function FeedCard(props: {
   badge?: React.ReactNode
   tags?: React.ReactNode
   excerpt?: string
+  searchExcerpt?: string
   open: boolean
   focusOnOpen?: boolean
   toggle: () => void

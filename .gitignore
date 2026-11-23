@@ -218,6 +218,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Trendly local artifacts
+.trendly/
 data/digests/
 data/trendly.db
 output/

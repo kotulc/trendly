@@ -49,11 +49,13 @@ The initial explorer, standalone mndsite feed and RSS export, and Trendly previe
 
 - **Implemented.** Subscriptions lists subscriptions in `feeds.yaml`, recognized feed URLs from post citations, and the host site's configured RSS URL. Feed URLs identify subscriptions, even when publishers or display names match. The toolbar filters by format or subscription status and can sort by feed entry count. Publisher and citation metadata stays on post cards and in post filters.
 - **Implemented.** The open repository supplies **Posts** and **Site feed**. Subscribe to a site built with mndsite by adding its deployed `rss.xml` URL to `feeds.yaml`. Subscriptions offers the configured host RSS URL as a subscription when available.
-- **Planned.** Evaluate JSON Feed as the first additional syndication format. Detect each supported format from the feed response and normalize entries for the existing reader. Keep existing RSS and Atom subscription URLs compatible, reuse direct fetching and the optional proxy, and report unsupported or invalid feeds per subscription.
+- **Implemented.** Detect JSON Feed 1 and 1.1 from the response and normalize entries, tags, dates, and attachments into the existing reader. RSS and Atom use the same fetch and proxy flow, with errors reported per subscription.
 
 **Exit check.** Open a host repository with posts that cite both ordinary links and supported feed URLs. Verify that **Subscriptions** shows the feed URLs and that the citations still appear on post cards. Subscribe to a deployed mndsite `rss.xml` and read its published entries in **External feeds**. Verify that RSS, Atom, and the first additional format can be read together and that a failed subscription leaves the other feeds available.
 
 ## 6. Build indexed search and a shared feed fetcher
+
+- **Implemented locally.** `npm run dev:full` starts Vite and the API together. SQLite FTS5 indexes the example workspace's published posts and Planet Money, and indexed matches open in the existing cards. The API also exposes the approved subscription through its shared feed cache. A separate API start command is available for deployment.
 
 - Build on the header search and its `/` shortcut. Add ranked full-text results for published host posts and subscribed feed entries, with scope, tag, date, and media filters. Show the source and a matched excerpt. Open results in the existing post or feed card. Keep the current in-browser search available when the service is unavailable and for local drafts.
 - Add an optional indexing service that reads published host content at a repository revision and ingests entries from configured subscriptions. Index titles, summaries, available body text, and metadata using stable post paths and feed entry IDs. Update the index as content and feeds change. Remove unpublished posts and entries for removed subscriptions from the workspace's search results.

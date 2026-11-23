@@ -6,7 +6,7 @@ Trendly is a browser-first workspace for previewing a site's Git-managed posts a
 
 - **Browse the host site.** Use **Posts** and **Site feed** to work with the content from the open repository. Local and remote inputs produce the same in-memory view.
 - **Preview the published feed.** A compact list shows each post's media type, title, source, and date. Open one post at a time to see its summary, metadata, full Markdown, and rich media across the column. Trendly's local preview can also show clearly marked drafts and reload after an editor or agent changes the files.
-- **Read external feeds.** Browse combined or individual RSS and Atom subscriptions in **External feeds**. Use **Subscriptions** to manage them. Direct browser fetch is the default, with an optional proxy for feeds that block browser reads.
+- **Read external feeds.** Browse combined or individual RSS, Atom, and JSON Feed subscriptions in **External feeds**. Use **Subscriptions** to manage them. Direct browser fetch is the default, with an optional proxy for feeds that block browser reads.
 - **Manage feed configuration.** Save site feed options and subscriptions directly in Trendly, with optional YAML review.
 
 ## Repository and publishing
@@ -25,13 +25,21 @@ Keep **Open folder** pointed at the same checkout your editor or agent uses. Whe
 
 The static build is available with `npm run build`. See the [user guide](user_guide.md) for remote browsing and GitHub writes, and the [implementation plan](implementation_plan.md) for the architecture and remaining work.
 
+## Run indexed search
+
+Run `npm run dev:full` to start Vite and the API together. Search in **Posts** or **External feeds** with the example repository loaded. Ranked results show a matching excerpt and expand in the usual cards. The index watches the example workspace for changes to published posts and indexes the Planet Money subscription. Browser search continues to cover drafts, other subscriptions, and repositories opened through the folder or GitHub picker.
+
+For a hosted setup, run `npm run build`, serve `dist/`, and route `/api` on the same origin to `npm run start:api`. For an app hosted under a base path, route its `api/` subpath to the same API paths. The API listens on `127.0.0.1:8787` by default. Set `PORT` or `TRENDLY_API_HOST` for the deployment. Put `TRENDLY_INDEX_DB` on persistent storage, or keep the default `.trendly/search.sqlite`.
+
+The API indexes one operator-selected workspace and one approved feed. Set `TRENDLY_INDEX_ROOT` to index a different checkout for API use. Set `TRENDLY_INDEX_FEED` to an exact URL present in that checkout's `feeds.yaml` to change the indexed subscription. The browser integration currently uses the example workspace. `GET /api/search` takes `q`, `scope` (`posts` or `feeds`), and optional `tag`, `media`, `from`, and `to` filters. Test the API with `npm run test:server`.
+
 ## External subscriptions
 
 In `feeds.yaml`, list subscription names and URLs under `feeds`. If some sources block browser reads, set a **Feed proxy URL** in **Subscription settings**. The saved `proxy_url` should point to a trusted service that accepts the feed URL as a `url` query parameter. Trendly tries the original feed first.
 
 When running `npm run dev`, Trendly can read NPR podcast feeds such as Planet Money through a same-origin development route. Keep the original NPR URL in `feeds.yaml`. A deployed static build uses the configured HTTPS `proxy_url` for blocked feeds. The endpoint should fetch only approved feed URLs server-side, return the feed XML, and allow requests from the deployed Trendly origin.
 
-**Subscriptions** lists configured subscriptions, RSS and Atom URLs recognized in post citations, and the host site's RSS URL when configured. Support for more feed formats is planned. [Implementation plan](implementation_plan.md#5-refine-subscriptions-and-expand-feed-format-support)
+**Subscriptions** lists configured subscriptions, recognized feeds from post citations, and the host site's RSS URL when configured. Trendly detects RSS, Atom, and JSON Feed from the fetched content. The server's `/api/feed?url=...` can serve as a same-origin proxy for the approved subscription using the indexer's fetch cache. [Implementation plan](implementation_plan.md#5-refine-subscriptions-and-expand-feed-format-support)
 
 ## Post cards
 
@@ -39,6 +47,6 @@ Use `description` for the card excerpt and `site` for a publication label. The f
 
 In Markdown, use standard image syntax and give a YouTube, Vimeo, or direct audio or video link the title `"embed"` to show a player when the card expands. Source metadata also accepts `audio_url` and `video_url` for direct media files. Set `placement: inline` on the corresponding source entry when the body already contains the player.
 
-Expanded RSS and Atom cards show images and native audio and video from feed content. They also read media enclosures and recognize YouTube and Vimeo embeds. The feed must supply a media file, an image URL, or a supported embed. For feeds that publish excerpts, use **Open full post** to see media that appears only on the publisher's page.
+Expanded feed cards show images and native audio and video from feed content, including RSS and Atom enclosures and JSON Feed attachments. They also recognize YouTube and Vimeo embeds. The feed must supply a media file, an image URL, or a supported embed. For feeds that publish excerpts, use **Open full post** to see media that appears only on the publisher's page.
 
 The portable feed component, metadata helper, and stylesheet come from mndsite and are vendored in `src/feed/` so either project can build independently. Keep those files in sync when changing the shared cards.

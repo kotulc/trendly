@@ -99,6 +99,7 @@
 .mnd-feed-entry[open] .mnd-feed-type { max-block-size: 2.9rem; }
 .mnd-feed-meta { display: flex; flex-wrap: wrap; gap: .35rem .55rem; align-items: baseline; min-width: 0; color: var(--feed-muted); font-size: .8125rem; }
 .mnd-feed-info > .mnd-feed-meta { flex-wrap: nowrap; color: var(--feed-secondary); font-size: .75rem; line-height: 1.35; }
+.mnd-feed-search-excerpt { color: var(--feed-muted); font-size: .8125rem; line-height: 1.4; overflow-wrap: anywhere; }
 .mnd-feed-site, .mnd-feed-meta-item { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mnd-feed-publication { white-space: nowrap; }
 .mnd-feed-info > .mnd-feed-meta > * + * { border-inline-start: 1px solid var(--feed-divider); padding-inline-start: .55rem; }

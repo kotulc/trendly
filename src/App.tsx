@@ -7,6 +7,7 @@ import { feedSettings, sameFeedSettings, sourceProxyUrl, subscriptionDrafts, upd
 import { PublicationDialog, type PublicationCommit } from './PublicationDialog'
 import { ModalDialog } from './ModalDialog'
 import { feedFormatHint, fetchFeed, type FeedFormat } from './rss'
+import { useIndexedSearch } from './indexed-search'
 
 type Page = 'posts' | 'preview' | 'feeds' | 'sources'
 type Loaded = { repo: Repository; snapshot: Snapshot; workspace: number }
@@ -16,7 +17,7 @@ type PostView = 'posts' | 'preview'
 type SettingsEdit<T> = { original: T; value: T }
 
 const mediaLabels = { article: 'Article', audio: 'Audio', video: 'Video', image: 'Image', link: 'Link' }
-const feedFormatLabels: Record<FeedFormat, string> = { rss: 'RSS', atom: 'Atom' }
+const feedFormatLabels: Record<FeedFormat, string> = { rss: 'RSS', atom: 'Atom', json: 'JSON Feed' }
 const postStatuses = ['Archived', 'Draft', 'Published']
 
 function withPostStatus(post: FeedEntry): FeedEntry {
@@ -75,7 +76,7 @@ export function App() {
   const [formatFilter, setFormatFilter] = useState('')
   const [sourceOrder, setSourceOrder] = useState('name')
   const [media, setMedia] = useState('')
-  const [dateOrder, setDateOrder] = useState<'newest' | 'oldest'>('newest')
+  const [dateOrder, setDateOrder] = useState<'newest' | 'oldest' | 'relevance'>('relevance')
   const [repositoryDialog, setRepositoryDialog] = useState(false)
   const [error, setError] = useState('')
   const [liveRefreshError, setLiveRefreshError] = useState('')
@@ -174,7 +175,7 @@ export function App() {
         setSourceOrder('name')
         setSourceSelections({ posts: '', preview: '' })
         setMedia('')
-        setDateOrder('newest')
+        setDateOrder('relevance')
       }
       return true
     } catch (failure) {
@@ -261,7 +262,7 @@ export function App() {
     setTag('')
     setStatus('')
     setMedia('')
-    setDateOrder('newest')
+    setDateOrder('relevance')
   }
 
   async function chooseFolder() {
@@ -347,12 +348,18 @@ export function App() {
   }) : savedPosts
   const posts = previewPosts.map(withPostStatus)
   const query = search.trim().toLowerCase()
+  const indexedScope = repo?.source === 'example' && (page === 'posts' || page === 'feeds') ? page : undefined
+  const indexed = useIndexedSearch(indexedScope, query, tag, media)
+  const indexedPosts = page === 'posts' ? indexed : undefined
+  const indexedSubscription = page === 'feeds' && readerSubscriptions.find(feed => feed.url === indexed?.feedUrl)
+  const indexedFeed = indexedSubscription && (!selectedFeed || selectedFeed === indexedSubscription.url) ? indexed : undefined
+  const dateSort = byDate(dateOrder === 'oldest' ? 'oldest' : 'newest')
   const facet = (entry: FeedEntry, name: string) => entry.facets?.find(item => item.name === name)?.values || []
   const matches = (entry: FeedEntry) => !query ||
     [entry.title, entry.summary, entry.body, entry.site || '', entry.origin || '',
       ...(entry.facets || []).flatMap(facet => facet.values), ...entry.sources.flatMap(source => [source.title || '', source.url, source.publisher || ''])]
       .some(value => value.toLowerCase().includes(query))
-  const matchesFilters = (entry: FeedEntry) => matches(entry) && (!tag || facet(entry, 'tags').includes(tag)) &&
+  const matchesFacets = (entry: FeedEntry) => (!tag || facet(entry, 'tags').includes(tag)) &&
     (!status || facet(entry, 'status').includes(status)) && (!media || entryMediaType(entry) === media)
   const repositoryPage = page === 'posts' || page === 'preview' ? page : undefined
   const postPublishers = new Map<string, { name: string; posts: Set<string> }>()
@@ -368,8 +375,16 @@ export function App() {
   }
   const selectedSource = repositoryPage ? sourceSelections[repositoryPage] : ''
   const selectedPosts = postPublishers.get(selectedSource)?.posts
-  const listedPosts = repositoryPage ? posts.filter(post =>
-    matchesFilters(post) && (!selectedPosts?.size || selectedPosts.has(post.id))).sort(byDate(dateOrder)) : undefined
+  const matchesPublisher = (post: FeedEntry) => !selectedPosts?.size || selectedPosts.has(post.id)
+  const localPosts = repositoryPage ? posts.filter(post =>
+    matches(post) && matchesFacets(post) && matchesPublisher(post)).sort(dateSort) : undefined
+  const indexedPostIds = new Set(indexedPosts?.results.map(({ entry }) => entry.id))
+  const listedPosts = indexedPosts ? [
+    ...indexedPosts.results.map(({ entry, excerpt }) => withPostStatus({ ...entry, searchExcerpt: excerpt }))
+      .filter(post => matchesFacets(post) && matchesPublisher(post)),
+    ...(localPosts ?? []).filter(post => post.draft && !indexedPostIds.has(post.id)),
+  ] : localPosts
+  if (indexedPosts && dateOrder !== 'relevance') listedPosts?.sort(dateSort)
   const sidebarFilter = repositoryPage ? {
     label: `${page === 'posts' ? 'Posts' : 'Site feed'} publishers and citations`, all: 'All publishers',
     options: [...postPublishers].map(([key, publisher]) => ({ key, name: publisher.name })).sort((a, b) => a.name.localeCompare(b.name)),
@@ -383,8 +398,14 @@ export function App() {
   const visibleFeeds = readerSubscriptions.filter(feed => !selectedFeed || feed.url === selectedFeed)
   const feedEntries = visibleFeeds.flatMap(feed => (feedByUrl.get(feed.url)?.entries ?? [])
     .map(entry => ({ ...entry, origin: feed.name })))
-  const activity = feedEntries.filter(matchesFilters).sort(byDate(dateOrder))
-  const filterEntries = page === 'feeds' ? feedEntries : posts
+  const localActivity = feedEntries.filter(entry => matches(entry) && matchesFacets(entry)).sort(dateSort)
+  const activity = indexedFeed ? [
+    ...indexedFeed.results.map(({ entry, excerpt }) => ({ ...entry, searchExcerpt: excerpt })).filter(matchesFacets),
+    ...localActivity.filter(entry => !entry.id.startsWith(`${indexedFeed.feedUrl}#`)),
+  ] : localActivity
+  if (indexedFeed && dateOrder !== 'relevance') activity.sort(dateSort)
+  const filterEntries = page === 'feeds' ? [...feedEntries, ...(indexedFeed ? activity : [])]
+    : [...posts, ...(indexedPosts ? listedPosts ?? [] : [])]
   const availableTags = [...new Set(filterEntries.flatMap(entry => facet(entry, 'tags')))].sort()
   const availableStatuses = [...new Set([
     ...(repositoryPage ? postStatuses : []), ...filterEntries.flatMap(entry => facet(entry, 'status')),
@@ -431,8 +452,8 @@ export function App() {
   const descriptions: Record<Page, string> = {
     posts: 'Browse Markdown from the host site’s repository.',
     preview: 'Preview the host site’s posts and edit its mndsite feed settings.',
-    feeds: 'Read entries from the RSS and Atom feeds you subscribe to.',
-    sources: 'Manage subscriptions to RSS and Atom feeds, including the host site’s published RSS feed.',
+    feeds: 'Read entries from the feeds you subscribe to.',
+    sources: 'Manage subscriptions, including the host site’s published RSS feed.',
   }
   const active = navigation.find(item => item.id === page)!
   const searchLabel = `Search ${active.title.toLowerCase()}`
@@ -703,7 +724,10 @@ export function App() {
               <select aria-label="Filter by media type" value={media} onChange={event => setMedia(event.target.value)}>
                 <option value="">All media types</option>{Object.entries(mediaLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
-              <select aria-label="Sort by date" value={dateOrder} onChange={event => setDateOrder(event.target.value === 'oldest' ? 'oldest' : 'newest')}>
+              <select aria-label={indexedPosts || indexedFeed ? 'Sort results' : 'Sort by date'}
+                value={dateOrder === 'relevance' && !indexedPosts && !indexedFeed ? 'newest' : dateOrder}
+                onChange={event => setDateOrder(event.target.value === 'relevance' ? 'relevance' : event.target.value === 'oldest' ? 'oldest' : 'newest')}>
+                {(indexedPosts || indexedFeed) && <option value="relevance">Relevance</option>}
                 <option value="newest">Newest first</option><option value="oldest">Oldest first</option>
               </select>
             </>}
