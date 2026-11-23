@@ -6,6 +6,8 @@ export type Repository = {
   label: string
   source: 'example' | 'checkout' | 'import' | 'github'
   ref?: string
+  requestedRef?: string
+  repoUrl?: string
   revision?: string
   stamp?: string
   paths: () => string[]
@@ -38,6 +40,7 @@ export type Snapshot = {
   subscriptions: Subscription[]
   proxy?: string
   rss?: string
+  repoUrl?: string
   color?: string
   typeset?: string
 }
@@ -196,6 +199,7 @@ export async function loadRepository(repo: Repository): Promise<Snapshot> {
     section: text(config.feed_url).replace(/^\/+|\/+$/g, '').replace(/^(none|auto|default)$/, ''),
     posts, subscriptions, proxy: website(settings.proxy_url),
     rss: base && new URL('rss.xml', base.replace(/\/*$/, '/')).href,
+    repoUrl: repo.repoUrl ?? website(config.repo_url),
     color: text(object(config.theme).color), typeset: text(object(config.theme).typeset),
   }
 }
@@ -357,7 +361,8 @@ export async function remoteRepository(input: string, ref: string): Promise<Repo
     return saved
   }
   return {
-    label: address, source: 'github', ref: requestedRef, revision: commit.sha, paths: () => paths,
+    label: address, source: 'github', ref: requestedRef, requestedRef: ref.trim(), revision: commit.sha,
+    repoUrl: `https://github.com/${address}`, paths: () => paths,
     read: path => fetchData(raw(path), response => response.text()),
     asset: raw,
     link: path => `https://github.com/${address}/blob/${commit.sha}/${path.split('/').map(encodeURIComponent).join('/')}`,

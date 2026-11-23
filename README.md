@@ -6,7 +6,7 @@ Trendly is a browser-first workspace for previewing a site's Git-managed posts a
 
 - **Browse the host site.** Use **Posts** and **Site feed** to work with the content from the open repository. Local and remote inputs produce the same in-memory view.
 - **Preview the published feed.** A compact list shows each post's media type, title, source, and date. Open one post at a time to see its summary, metadata, full Markdown, and rich media across the column. Trendly's local preview can also show clearly marked drafts and reload after an editor or agent changes the files.
-- **Read external feeds.** Browse combined or individual RSS and Atom subscriptions in **External feeds**. Use **Sources** to manage subscriptions. Direct browser fetch is the default, with an optional proxy for feeds that block browser reads.
+- **Read external feeds.** Browse combined or individual RSS and Atom subscriptions in **External feeds**. Use **Subscriptions** to manage them. Direct browser fetch is the default, with an optional proxy for feeds that block browser reads.
 - **Manage feed configuration.** Save site feed options and subscriptions directly in Trendly, with optional YAML review.
 
 ## Repository and publishing
@@ -19,7 +19,7 @@ Use the **Site feed** switches to preview publication states in Trendly, then se
 
 ## Run locally
 
-Use Node.js 22.12 or later, install dependencies with `npm ci`, and start with `npm run dev`. On Windows PowerShell, use `npm.cmd` in place of `npm` if needed. The app opens the bundled [example repository](example-workspace). Use **Open folder** to choose it on disk or to open your own checkout.
+Use Node.js 22.12 or later, install dependencies with `npm ci`, and start with `npm run dev`. On Windows PowerShell, use `npm.cmd` in place of `npm` if needed. The app opens the bundled [example repository](example-workspace). Select its title, **Field Notes**, in the sidebar to open **Repository settings** and choose a local checkout or GitHub repository.
 
 Keep **Open folder** pointed at the same checkout your editor or agent uses. When the browser grants a directory handle, Trendly checks for changes about every two seconds while the tab is visible and refreshes when you return to it. Saved working-tree edits appear without a Git commit. Firefox's folder import is a read-only snapshot. Select **Reopen folder** after editing files.
 
@@ -27,11 +27,11 @@ The static build is available with `npm run build`. See the [user guide](user_gu
 
 ## External subscriptions
 
-In `feeds.yaml`, list subscription names and URLs under `feeds`. If some sources block browser reads, set a **Feed proxy URL** in Source settings. The saved `proxy_url` should point to a trusted service that accepts the feed URL as a `url` query parameter. Trendly tries the original feed first.
+In `feeds.yaml`, list subscription names and URLs under `feeds`. If some sources block browser reads, set a **Feed proxy URL** in **Subscription settings**. The saved `proxy_url` should point to a trusted service that accepts the feed URL as a `url` query parameter. Trendly tries the original feed first.
 
 When running `npm run dev`, Trendly can read NPR podcast feeds such as Planet Money through a same-origin development route. Keep the original NPR URL in `feeds.yaml`. A deployed static build uses the configured HTTPS `proxy_url` for blocked feeds. The endpoint should fetch only approved feed URLs server-side, return the feed XML, and allow requests from the deployed Trendly origin.
 
-**Sources** lists configured subscriptions, RSS and Atom URLs recognized in post citations, and the host site's RSS URL when configured. Support for more feed formats is planned. [Implementation plan](implementation_plan.md#5-refine-sources-and-expand-feed-format-support)
+**Subscriptions** lists configured subscriptions, RSS and Atom URLs recognized in post citations, and the host site's RSS URL when configured. Support for more feed formats is planned. [Implementation plan](implementation_plan.md#5-refine-subscriptions-and-expand-feed-format-support)
 
 ## Post cards
 

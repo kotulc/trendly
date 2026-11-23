@@ -94,7 +94,7 @@ export function ConfigDialog({ path, before, repo, pending, editor, prepareChang
 
   return <ModalDialog className="publication-dialog config-dialog" labelledBy="config-title" saving={saving} onClose={onClose}>
     <form onSubmit={write}>
-      <h2 id="config-title">{pending?.postTitle ? pending.action : sourceSettings ? 'Source settings' : 'Feed settings'}</h2>
+      <h2 id="config-title">{pending?.postTitle ? pending.action : sourceSettings ? 'Subscription settings' : 'Feed settings'}</h2>
       {pending?.postTitle && <p><strong>{pending.postTitle}</strong></p>}
       {repo.publication && canSave && <p>Save to <strong>{repo.label}</strong> on <code>{repo.publication.branch}</code>.</p>}
       {fileChange && <p>To save to your checkout, right-click <strong>Save changes</strong> and choose <strong>Save Link As</strong>. Replace <code>{path}</code> at the repository root, then reopen the folder.</p>}

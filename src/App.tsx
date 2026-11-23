@@ -5,6 +5,7 @@ import { exampleRepository, importFolder, loadRepository, normalizeSubscriptions
 import { ConfigDialog, type PendingConfigChange } from './ConfigDialog'
 import { feedSettings, sameFeedSettings, sourceProxyUrl, subscriptionDrafts, updateFeedSettings, updatePostDrafts, updateSourceProxy, updateSubscriptions, type FeedSettings, type SubscriptionDraft } from './config'
 import { PublicationDialog, type PublicationCommit } from './PublicationDialog'
+import { ModalDialog } from './ModalDialog'
 import { feedFormatHint, fetchFeed, type FeedFormat } from './rss'
 
 type Page = 'posts' | 'preview' | 'feeds' | 'sources'
@@ -16,7 +17,6 @@ type SettingsEdit<T> = { original: T; value: T }
 
 const mediaLabels = { article: 'Article', audio: 'Audio', video: 'Video', image: 'Image', link: 'Link' }
 const feedFormatLabels: Record<FeedFormat, string> = { rss: 'RSS', atom: 'Atom' }
-const repositorySourceLabels = { example: 'Bundled example', checkout: 'Live local checkout', import: 'Imported snapshot', github: 'GitHub' }
 const postStatuses = ['Archived', 'Draft', 'Published']
 
 function withPostStatus(post: FeedEntry): FeedEntry {
@@ -48,7 +48,7 @@ const navigation = [
   { id: 'posts', title: 'Posts', icon: Layers3 },
   { id: 'preview', title: 'Site feed', icon: List },
   { id: 'feeds', title: 'External feeds', icon: Rss },
-  { id: 'sources', title: 'Sources', icon: Link2 },
+  { id: 'sources', title: 'Subscriptions', icon: Link2 },
 ] as const
 
 const palettes: Record<string, [number, number]> = {
@@ -76,7 +76,7 @@ export function App() {
   const [sourceOrder, setSourceOrder] = useState('name')
   const [media, setMedia] = useState('')
   const [dateOrder, setDateOrder] = useState<'newest' | 'oldest'>('newest')
-  const [remoteForm, setRemoteForm] = useState(false)
+  const [repositoryDialog, setRepositoryDialog] = useState(false)
   const [error, setError] = useState('')
   const [liveRefreshError, setLiveRefreshError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -137,6 +137,16 @@ export function App() {
       }
       if (replace) {
         setActiveFeed('')
+        const url = new URL(window.location.href)
+        if (repo.source === 'github') {
+          url.searchParams.set('repo', repo.label)
+          if (repo.requestedRef) url.searchParams.set('ref', repo.requestedRef)
+          else url.searchParams.delete('ref')
+        } else {
+          url.searchParams.delete('repo')
+          url.searchParams.delete('ref')
+        }
+        if (url.href !== window.location.href) window.history.replaceState(null, '', url)
       }
       setData({ repo, snapshot, workspace: replace ? version : data?.workspace ?? version })
       setLiveRefreshError('')
@@ -181,7 +191,11 @@ export function App() {
     }
   }
 
-  useEffect(() => { void load(exampleRepository) }, [])
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search)
+    const target = query.get('repo')
+    void load(target ? () => remoteRepository(target, query.get('ref') ?? '') : exampleRepository)
+  }, [])
 
   useEffect(() => {
     function followPostLink() {
@@ -250,24 +264,29 @@ export function App() {
     setDateOrder('newest')
   }
 
-  function chooseFolder() {
+  async function chooseFolder() {
     const picker = (window as Window & { showDirectoryPicker?: Parameters<typeof openFolder>[0] }).showDirectoryPicker
-    if (picker) void load(() => openFolder(picker))
+    if (picker) {
+      if (await load(() => openFolder(picker))) setRepositoryDialog(false)
+    }
     else fileInput.current?.click()
   }
 
   async function openRemote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    if (await load(() => remoteRepository(String(form.get('repository')), String(form.get('ref'))))) setRemoteForm(false)
+    if (await load(() => remoteRepository(String(form.get('repository')), String(form.get('ref'))))) setRepositoryDialog(false)
   }
 
   async function reload() {
     if (data?.repo.refresh) await load(data.repo.refresh, false)
-    else if (data?.repo.source === 'import') chooseFolder()
+    else if (data?.repo.source === 'import') await chooseFolder()
   }
 
   const snapshot = data?.snapshot
+  const repo = data?.repo
+  const configuredGitHub = repo?.source !== 'example' && snapshot?.repoUrl && /^https:\/\/github\.com\//i.test(snapshot.repoUrl)
+    ? snapshot.repoUrl : ''
   const feedYaml = snapshot?.configs['feeds.yaml']
   const siteYaml = snapshot?.configs['mndsite.yaml']
   const savedFeedSettings = useMemo(() => feedSettings(siteYaml), [siteYaml])
@@ -495,7 +514,7 @@ export function App() {
 
   function sourceConfigChange(): ConfigChange {
     if (before !== feedYaml || (proxyEdit && proxyEdit.original !== savedProxyUrl)) {
-      throw new Error('Source settings changed on disk. Discard changes to use the latest version.')
+      throw new Error('Subscription settings changed on disk. Discard changes to use the latest version.')
     }
     const updatedSubscriptions = subscriptionsChanged ? updateSubscriptions(before, subscriptions) : before
     const after = proxyEdit ? updateSourceProxy(updatedSubscriptions, proxyEdit.value) : updatedSubscriptions
@@ -592,18 +611,11 @@ export function App() {
             }}><X size={15} aria-hidden="true" /></button> : <kbd aria-hidden="true">/</kbd>}
           </div>
           <div className="navbar-actions">
-            <button className="icon-button" aria-label="Open folder" title="Open folder" onClick={chooseFolder} disabled={busy}><FolderOpen size={17} aria-hidden="true" /></button>
-            <input type="file" ref={fileInput} hidden {...{ webkitdirectory: '' }} onChange={event => {
-              const files = event.currentTarget.files
-              if (files?.length) {
-                const imported = importFolder(files)
-                void load(() => imported)
-              }
-              event.currentTarget.value = ''
-            }} />
-            <button className="icon-button" aria-label="Open GitHub" title="Open GitHub" onClick={() => setRemoteForm(!remoteForm)} aria-expanded={remoteForm}><Github size={17} aria-hidden="true" /></button>
-            {(page === 'feeds' || page === 'sources') && <button className="icon-button" aria-label="Refresh feeds" title="Refresh feeds"
-              disabled={loadingFeeds || !readerSubscriptions.length} onClick={() => void refreshFeeds()}><RefreshCw size={17} aria-hidden="true" /></button>}
+            <button className="icon-button" aria-label={repo?.source === 'import' ? 'Reopen folder' : 'Sync repository'}
+              title={repo?.source === 'import' ? 'Reopen folder' : 'Sync repository'} onClick={() => void reload()}
+              disabled={busy || !repo || repo.source === 'example'}><RefreshCw size={17} aria-hidden="true" /></button>
+            {snapshot?.repoUrl && <a className="icon-button" href={snapshot.repoUrl} target="_blank" rel="noreferrer"
+              aria-label="View repository (opens in a new tab)" title="View repository"><Github size={17} aria-hidden="true" /></a>}
             <button className="icon-button" aria-label={dark ? 'Light theme' : 'Dark theme'} onClick={() => setDark(!dark)}>{dark ? <Sun size={17} /> : <Moon size={17} />}</button>
           </div>
         </div>
@@ -611,14 +623,24 @@ export function App() {
 
       <div className="layout">
         <aside className="sidebar">
-          <div className="sidebar-repo">
+          <button className="sidebar-repo" type="button" aria-haspopup="dialog" aria-expanded={repositoryDialog} disabled={busy}
+            aria-label={`${snapshot?.title || 'Workspace'} source repository settings`} onClick={() => {
+              setError('')
+              setRepositoryDialog(true)
+            }}>
             <strong>{snapshot?.title || 'Repository'}</strong>
-            {data && <>
-              <span>{data.repo.label}</span>
-              <span title={data.repo.revision}>{repositorySourceLabels[data.repo.source]}
-                {data.repo.ref && ` · ${data.repo.ref}`}{data.repo.revision && ` · ${data.repo.revision.slice(0, 8)}`}</span>
-            </>}
-          </div>
+            <Settings size={17} aria-hidden="true" />
+            <span className="sidebar-repo-info">
+              <span>Source repository</span>
+              {repo && repo.source !== 'example' && <>
+                {repo.label !== snapshot?.title && <span>{repo.label}</span>}
+                {repo.source === 'github'
+                  ? <span title={repo.revision}>{[repo.ref, repo.revision?.slice(0, 8)].filter(Boolean).join(' · ')}</span>
+                  : <span>{repo.source === 'checkout' ? 'Live local checkout' : 'Imported snapshot'}</span>}
+              </>}
+            </span>
+          </button>
+          <hr className="sidebar-divider" />
           <nav aria-label="Trendly views">
             {navigation.map(({ id, title, icon: Icon }) => <Fragment key={id}>
               <button aria-current={page === id ? 'page' : undefined} onClick={() => navigate(id)}>
@@ -637,12 +659,6 @@ export function App() {
         </aside>
 
         <main>
-          {remoteForm && <form className="remote-form" onSubmit={openRemote}>
-            <label>GitHub repository<input name="repository" placeholder="owner/repository" required autoFocus /></label>
-            <label>Branch, tag, or commit<input name="ref" placeholder="Default branch" /></label>
-            <button className="button primary" type="submit" disabled={busy}>Open repository</button>
-            <button className="icon-button" type="button" aria-label="Close repository form" onClick={() => setRemoteForm(false)}><X size={17} /></button>
-          </form>}
           <div className="page-heading">
             <div className="breadcrumb">{snapshot?.title || 'Repository'} <span aria-hidden="true">/</span> {active.title}</div>
             <h1>{active.title}</h1>
@@ -654,7 +670,7 @@ export function App() {
                 if (data) setConfigEditor({ path: 'mndsite.yaml', before: data.snapshot.configs['mndsite.yaml'], repo: data.repo })
               }}><Settings size={15} aria-hidden="true" /> Feed settings</button>
               : <button className="button" disabled={busy || !data} onClick={openSourceSettings}>
-                <Settings size={15} aria-hidden="true" /> Source settings
+                <Settings size={15} aria-hidden="true" /> Subscription settings
               </button>}
             {(page === 'preview' ? feedChanges : sourceChanges) && <button className="button primary" disabled={busy}
               onClick={() => saveConfigChanges(page === 'preview' ? feedConfigChange : sourceConfigChange)}>Save changes</button>}
@@ -667,7 +683,7 @@ export function App() {
           {page === 'preview' && previewDrafts.size > draftChanges.size && <p className="activity publication-save-note">
             Use Posts to publish files from <code>drafts/</code>.
           </p>}
-          {error && <div className="notice" role="alert"><CircleHelp size={18} />{error}</div>}
+          {error && !repositoryDialog && <div className="notice" role="alert"><CircleHelp size={18} />{error}</div>}
           {liveRefreshError && !error && <p className="notice" role="status">Showing the last loaded checkout. {liveRefreshError}</p>}
           {repositoryPage && publicationCommit && <p className="notice" role="status">
             Committed to GitHub. <a href={publicationCommit.url} target="_blank" rel="noreferrer">View commit {publicationCommit.oid.slice(0, 8)}</a>
@@ -706,8 +722,8 @@ export function App() {
               </select>
             </>}
             <div className="controls-end">
-              {page !== 'feeds' && data && data.repo.source !== 'example' &&
-                <button className="button" disabled={busy} onClick={() => void reload()}><RefreshCw size={15} aria-hidden="true" /> {data.repo.source === 'import' ? 'Reopen folder' : page === 'sources' ? 'Reload workspace' : 'Refresh'}</button>}
+              {readingFeeds && <button className="button" disabled={loadingFeeds || !readerSubscriptions.length}
+                onClick={() => void refreshFeeds()}><RefreshCw size={15} aria-hidden="true" /> Refresh feeds</button>}
               <span className="count" role="status">{countText}</span>
             </div>
           </div>
@@ -783,7 +799,7 @@ export function App() {
             </button>
           </>}
           {page === 'feeds' && <>
-            {subscriptionsChanged && <p className="notice">Previewing unsaved subscription changes. <button className="button" onClick={() => navigate('sources')}>Sources</button></p>}
+            {subscriptionsChanged && <p className="notice">Previewing unsaved subscription changes. <button className="button" onClick={() => navigate('sources')}>Subscriptions</button></p>}
             {loadingFeeds && <p className="activity" role="status">Loading feeds…</p>}
             {snapshot && readerSubscriptions.length === 0 && <p className="activity">No feed subscriptions.</p>}
             {visibleFeeds.map(feed => {
@@ -795,6 +811,28 @@ export function App() {
           </>}
         </main>
       </div>
+      <input type="file" ref={fileInput} hidden {...{ webkitdirectory: '' }} onChange={event => {
+        const files = event.currentTarget.files
+        if (files?.length) {
+          const imported = importFolder(files)
+          void load(() => imported).then(loaded => { if (loaded) setRepositoryDialog(false) })
+        }
+        event.currentTarget.value = ''
+      }} />
+      {repositoryDialog && <ModalDialog className="publication-dialog" labelledBy="repository-title" saving={busy} onClose={() => setRepositoryDialog(false)}>
+        <form onSubmit={openRemote}>
+          <h2 id="repository-title">Repository settings</h2>
+          <label>GitHub repository<input name="repository" placeholder="owner/repository" required autoFocus disabled={busy}
+            defaultValue={repo?.source === 'github' ? repo.label : new URLSearchParams(window.location.search).get('repo') ?? configuredGitHub} /></label>
+          <label>Branch, tag, or commit<input name="ref" placeholder="Default branch" disabled={busy}
+            defaultValue={repo?.requestedRef ?? new URLSearchParams(window.location.search).get('ref') ?? ''} /></label>
+          {error && <p role="alert">{error}</p>}
+          <div className="publication-buttons">
+            <button className="button" type="button" disabled={busy} onClick={() => void chooseFolder()}><FolderOpen size={15} aria-hidden="true" /> Open folder</button>
+            <button className="button primary" type="submit" disabled={busy}>Open GitHub</button>
+          </div>
+        </form>
+      </ModalDialog>}
       {data?.repo.publication && pendingPublication && <PublicationDialog
         entry={pendingPublication.entry} initialDestination={pendingPublication.destination}
         snapshot={data.snapshot} repository={data.repo.label} publication={data.repo.publication}

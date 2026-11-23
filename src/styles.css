@@ -80,15 +80,26 @@ svg { flex: none; vertical-align: middle; }
 
 .layout { display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr); max-width: var(--layout-width); min-height: calc(100vh - var(--navbar-height)); margin: auto; }
 .sidebar {
+  --nav-inline-padding: .65rem;
   position: sticky; top: var(--navbar-height); height: calc(100vh - var(--navbar-height));
   padding: 1.4rem .9rem 1rem; display: flex; flex-direction: column; overflow-y: auto;
   background: linear-gradient(var(--site-gray-200), var(--site-gray-200)) right 1.4rem / 1px calc(100% - 2.4rem) no-repeat;
 }
-.sidebar-repo { display: grid; gap: .25rem; padding: .15rem .65rem 1.2rem; overflow-wrap: anywhere; }
+.sidebar-repo {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .25rem .55rem;
+  width: 100%; padding: .55rem var(--nav-inline-padding);
+  border: 0; border-radius: .4rem; background: transparent; color: inherit; text-align: left; overflow-wrap: anywhere;
+}
+.sidebar-repo:is(:hover:not(:disabled), [aria-expanded="true"]) {
+  background: var(--site-gray-100);
+}
+.sidebar-repo-info { display: grid; grid-column: 1 / -1; gap: .25rem; }
 .sidebar-repo strong { font-size: .9375rem; font-weight: 680; }
-.sidebar-repo span { color: var(--site-gray-600); font-size: .8125rem; }
+.sidebar-repo-info > span, .sidebar-repo > svg { color: var(--site-gray-600); }
+.sidebar-repo-info > span { font-size: .8125rem; }
+.sidebar-divider { margin: .55rem 0; border: 0; border-block-start: 1px solid var(--site-gray-200); }
 .sidebar nav { display: grid; gap: .2rem; }
-.sidebar nav button { display: flex; align-items: center; gap: .65rem; padding: .57rem .65rem; border: 0; border-radius: .36rem; background: transparent; text-align: left; font-size: .875rem; font-weight: 540; }
+.sidebar nav button { display: flex; align-items: center; gap: .65rem; padding: .57rem var(--nav-inline-padding); border: 0; border-radius: .36rem; background: transparent; text-align: left; font-size: .875rem; font-weight: 540; }
 .sidebar nav button:hover { background: var(--site-gray-100); }
 .sidebar nav button[aria-current] { background: var(--app-highlight); font-weight: 650; }
 .sidebar-feeds { display: grid; min-width: 0; gap: .15rem; margin: .1rem 0 .35rem 1.15rem; padding: 0 0 0 .5rem; border-inline-start: 1px solid var(--site-gray-200); list-style: none; }
@@ -111,9 +122,6 @@ h1 { font-size: clamp(1.9rem, 3vw, 2.375rem); letter-spacing: -.04em; line-heigh
 .activity { margin-top: 1rem; }
 .publication-save-note { margin: 0 0 1.1rem; }
 .notice { display: flex; align-items: center; gap: .5rem; border: 1px solid var(--site-gray-200); background: var(--site-gray-100); border-radius: .4rem; padding: .6rem .75rem; margin: .6rem 0; font-size: .875rem; }
-.remote-form { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem; margin: 0 0 1.4rem; padding: .85rem; border: 1px solid var(--site-gray-200); border-radius: .5rem; }
-.remote-form label { display: grid; gap: .3rem; flex: 1 1 9rem; font-size: .8125rem; font-weight: 600; }
-.remote-form input { min-width: 0; height: 34px; padding: 0 .5rem; border: 1px solid var(--site-gray-200); border-radius: .35rem; background: transparent; font-size: .875rem; }
 
 .mnd-feed-row { position: relative; min-width: 0; }
 .mnd-feed-row > .mnd-feed-entry > .mnd-feed-summary,
@@ -199,11 +207,11 @@ h1 { font-size: clamp(1.9rem, 3vw, 2.375rem); letter-spacing: -.04em; line-heigh
 @media (max-width: 560px) {
   :root { --navbar-gutter: .7rem; }
   .layout { display: block; }
-  .sidebar { position: static; height: auto; background: none; border-bottom: 1px solid var(--site-gray-200); padding: .5rem .7rem; }
+  .sidebar { --nav-inline-padding: .5rem; position: static; height: auto; background: none; border-bottom: 1px solid var(--site-gray-200); padding: .5rem .7rem; }
   .sidebar nav { display: flex; flex-wrap: wrap; }
-  .sidebar nav button { padding: .5rem; gap: .3rem; }
+  .sidebar nav button { padding-block: .5rem; gap: .3rem; }
   .sidebar-feeds { order: 1; flex-basis: 100%; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr)); margin: .25rem 0 0; padding: .3rem 0 0; border: 0; border-top: 1px solid var(--site-gray-200); }
-  .sidebar-repo { display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .6rem; padding: .15rem .45rem .45rem; }
+  .sidebar-repo { padding-block: .45rem; }
   .navbar-actions { gap: .2rem; }
   .brand { gap: .35rem; font-size: 1rem; }
   main { padding-top: 1.4rem; }

@@ -6,7 +6,7 @@ The initial explorer, standalone mndsite feed and RSS export, and Trendly previe
 
 ## 1. Replace the authoring shell with a repository explorer
 
-- Reuse the Pages CMS sidebar, header, list patterns, and styling where they can be adapted without its server runtime. Keep React, TypeScript, and Vite. Use a small shell with **Posts**, **Feeds**, and **Sources**. Bring forward Trendly's Markdown, YAML, and source-card code where useful.
+- Reuse the Pages CMS sidebar, header, list patterns, and styling where they can be adapted without its server runtime. Keep React, TypeScript, and Vite. Use a small shell with **Posts**, **Feeds**, and **Subscriptions**. Bring forward Trendly's Markdown, YAML, and source-card code where useful.
 - Retire the editor, mutation paths, conflict handling, suggestion writes, and Firefox write launcher as the reader takes over. Keep the prototype fixtures useful during the transition. Avoid adding an app database or a dependency on the Pages CMS authentication stack.
 - Put local folder selection and remote GitHub access behind a single read interface that lists paths, opens text, and resolves media. Start with public GitHub repositories, resolving a branch or tag to a commit for consistent reads. Handle private content through local checkouts initially.
 - Read `mndsite.yaml` for the content directory, asset conventions, and supported field mappings. Parse one root `feeds.yaml` for external subscriptions. Keep publisher and citation metadata in Markdown frontmatter. Add repository, branch, or folder diagnostics where they help explain missing content.
@@ -39,19 +39,19 @@ The initial explorer, standalone mndsite feed and RSS export, and Trendly previe
 ## 4. Add RSS and Atom subscriptions
 
 - Load RSS and Atom at runtime from `feeds.yaml`. Fetch directly in the browser where allowed. Support an optional operator-configured proxy for feeds that block browser reads. Keep working feeds and repository posts visible if one source fails.
-- Classify host posts and external entries with the same media chips. Support date sorting and filtering by media and tags. The initial Sources page groups subscriptions and recurring post publishers by name and shows separate published post and feed entry counts.
-- Add, edit, or remove subscriptions in Sources. Save changes through the settings controls and reload the subscription data after writing.
+- Classify host posts and external entries with the same media chips. Support date sorting and filtering by media and tags. The initial Subscriptions page groups subscriptions and recurring post publishers by name and shows separate published post and feed entry counts.
+- Add, edit, or remove subscriptions in Subscriptions. Save changes through the settings controls and reload the subscription data after writing.
 - Start with in-memory results, refresh controls, and error states per feed. Add IndexedDB only if repeat loading or offline reading warrants it.
 
 **Exit check.** Load one directly accessible feed and one feed blocked by CORS. Verify that repository views remain usable and that a configured proxy can retrieve the blocked feed.
 
-## 5. Refine Sources and expand feed format support
+## 5. Refine Subscriptions and expand feed format support
 
-- **Implemented.** Sources lists subscriptions in `feeds.yaml`, recognized feed URLs from post citations, and the host site's configured RSS URL. Feed URLs identify subscriptions, even when publishers or display names match. The toolbar filters by format or subscription status and can sort by feed entry count. Publisher and citation metadata stays on post cards and in post filters.
-- **Implemented.** The open repository supplies **Posts** and **Site feed**. Subscribe to a site built with mndsite by adding its deployed `rss.xml` URL to `feeds.yaml`. Sources offers the configured host RSS URL as a subscription when available.
+- **Implemented.** Subscriptions lists subscriptions in `feeds.yaml`, recognized feed URLs from post citations, and the host site's configured RSS URL. Feed URLs identify subscriptions, even when publishers or display names match. The toolbar filters by format or subscription status and can sort by feed entry count. Publisher and citation metadata stays on post cards and in post filters.
+- **Implemented.** The open repository supplies **Posts** and **Site feed**. Subscribe to a site built with mndsite by adding its deployed `rss.xml` URL to `feeds.yaml`. Subscriptions offers the configured host RSS URL as a subscription when available.
 - **Planned.** Evaluate JSON Feed as the first additional syndication format. Detect each supported format from the feed response and normalize entries for the existing reader. Keep existing RSS and Atom subscription URLs compatible, reuse direct fetching and the optional proxy, and report unsupported or invalid feeds per subscription.
 
-**Exit check.** Open a host repository with posts that cite both ordinary links and supported feed URLs. Verify that **Sources** shows the feed URLs and that the citations still appear on post cards. Subscribe to a deployed mndsite `rss.xml` and read its published entries in **External feeds**. Verify that RSS, Atom, and the first additional format can be read together and that a failed subscription leaves the other feeds available.
+**Exit check.** Open a host repository with posts that cite both ordinary links and supported feed URLs. Verify that **Subscriptions** shows the feed URLs and that the citations still appear on post cards. Subscribe to a deployed mndsite `rss.xml` and read its published entries in **External feeds**. Verify that RSS, Atom, and the first additional format can be read together and that a failed subscription leaves the other feeds available.
 
 ## 6. Build indexed search and a shared feed fetcher
 
@@ -59,6 +59,9 @@ The initial explorer, standalone mndsite feed and RSS export, and Trendly previe
 - Add an optional indexing service that reads published host content at a repository revision and ingests entries from configured subscriptions. Index titles, summaries, available body text, and metadata using stable post paths and feed entry IDs. Update the index as content and feeds change. Remove unpublished posts and entries for removed subscriptions from the workspace's search results.
 - Use the same server-side feed fetcher for background indexing and on-demand proxy requests. Support Trendly's existing `proxy_url` contract by accepting the feed URL in a `url` query parameter and returning the feed body. Keep direct browser fetching for feeds that allow it. Restrict the service to approved feed URLs and validate redirect targets. Set request timeouts and response size limits, and cache responses so the reader and indexer can reuse them.
 - Deploy the service independently of the static Trendly app. Connect a deployed Trendly instance through `proxy_url` and share the fetcher with the indexing pipeline. Use Planet Money's NPR RSS feed to verify the deployed path that the local development proxy currently covers.
+- Develop the API and indexer alongside the browser app in the Trendly repository. Keep `npm run dev` for the standalone browser workspace and add `npm run dev:full` to start Vite, the API, and the indexer with the example workspace. Proxy `/api` through Vite in development and route the same paths to the deployed backend. Use separate credentials and data for each environment.
+- Start with one end-to-end search workflow. Index published example posts and one subscribed feed, expose ranked results, and verify that edits and removals appear in search. Use SQLite FTS5 for the initial single-instance service with persistent storage. [SQLite FTS5](https://www.sqlite.org/fts5.html)
+- After that workflow works locally and when deployed, add GitHub App authorization to the same API. Register separate callback URLs for local and hosted environments. Keep GitHub tokens server-side, issue a Trendly session cookie, and use the user's permissions for repository writes. Give the background indexer read-only access where it needs credentials. The static app can continue to browse public repositories anonymously and submit supported writes with a user-supplied token. [GitHub App user authorization](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app)
 
 **Exit check.** On a deployed Trendly instance, subscribe to Planet Money and verify that it loads in **External feeds** and its episodes appear in indexed search. Edit and unpublish a host post, then verify that search reflects both changes. Stop the service and check that local post search and directly accessible feeds still work.
 
@@ -93,9 +96,13 @@ publication:
 
 **Exit check.** Start with an undated Markdown post under `drafts/`. In Trendly, preview publication, set its route and date, and save. Build with mndsite and verify the page, expandable feed, and RSS. Unpublish and rebuild, then republish and verify the same URL and RSS GUID. Check that the source Markdown path and bytes stay the same throughout and that a stale GitHub branch produces a recoverable save conflict.
 
-## Later
+## 8. Track reading and bookmarks in External feeds
 
-For a hosted **Sign in with GitHub** flow, consider a GitHub App with repository-scoped Contents permissions and a server-side callback to exchange the authorization code and manage short-lived user tokens. The static app can send a user-supplied token directly to the GitHub commit API today. Public repository reads can remain anonymous. [GitHub App user authorization](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app)
+- Mark external items as read when opened and let the reader mark them unread again. Add an **Unread** filter. Use the feed URL and a stable entry ID so edits and refreshes preserve reading state.
+- Let readers bookmark and unbookmark items independently of read status. Add a **Bookmarks** view and retain enough metadata to open or identify a bookmarked item after it rolls off its feed.
+- Persist reading state and bookmarks in the browser first. If account sync is added later, keep this state private to each user and independent of the shared search index and repository YAML.
+
+## Later
 
 Consider an **Updated** tag and filter for posts with a substantive revision after first publication. An updated post could show its last revision date and keep its original publication date, permalink, and RSS item ID. A published post could also show a pending revision while readers continue to see the last published version. **Archived** can coexist with revision status. Apply revision labels only when revision metadata is available.
 
