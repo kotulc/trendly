@@ -231,7 +231,7 @@ function PostLink({ href, title, children, external, resolve_media }) {
   const kind = embed ? 'video' : (title === 'embed' || external) && media_file_type(url?.pathname || href)
   const src = kind && !embed && (url?.href || resolve_media?.(href))
   if (!embed && !src) return href ? <a href={href} title={title || undefined}
-    {...(external && { target: '_blank', rel: 'noreferrer' })}>{children}</a> : <span>{children}</span>
+    target="_blank" rel="noreferrer">{children}</a> : <span>{children}</span>
   return <span className="mnd-feed-inline-media">
     <a href={embed ? href : src} target="_blank" rel="noreferrer">{children}</a>
     <MediaPlayer kind={kind} src={src} embed={embed} title={typeof children === 'string' ? children : undefined} />
@@ -342,7 +342,7 @@ function Post({ entry, open, focus_on_open, toggle, default_source, resolve_imag
             img: ({ src, alt }) => src ? <img src={src} alt={alt || ''} loading="lazy" referrerPolicy="no-referrer" /> : <span>{alt}</span>,
           }}>{entry.body}</Markdown>}
       </div>
-      {entry.href && <a className="mnd-feed-permalink" href={entry.href}>Open full post</a>}
+      {entry.href && <a className="mnd-feed-permalink" href={entry.href} target="_blank" rel="noreferrer">Open full post</a>}
     </FeedCard>
   )
 }

@@ -632,11 +632,9 @@ export function App() {
             <Settings size={17} aria-hidden="true" />
             <span className="sidebar-repo-info">
               <span>Source repository</span>
-              {repo && repo.source !== 'example' && <>
+              {repo && (repo.source === 'checkout' || repo.source === 'import') && <>
                 {repo.label !== snapshot?.title && <span>{repo.label}</span>}
-                {repo.source === 'github'
-                  ? <span title={repo.revision}>{[repo.ref, repo.revision?.slice(0, 8)].filter(Boolean).join(' · ')}</span>
-                  : <span>{repo.source === 'checkout' ? 'Live local checkout' : 'Imported snapshot'}</span>}
+                <span>{repo.source === 'checkout' ? 'Live local checkout' : 'Imported snapshot'}</span>
               </>}
             </span>
           </button>
@@ -826,6 +824,14 @@ export function App() {
             defaultValue={repo?.source === 'github' ? repo.label : new URLSearchParams(window.location.search).get('repo') ?? configuredGitHub} /></label>
           <label>Branch, tag, or commit<input name="ref" placeholder="Default branch" disabled={busy}
             defaultValue={repo?.requestedRef ?? new URLSearchParams(window.location.search).get('ref') ?? ''} /></label>
+          {repo?.source === 'github' && <details className="config-preview" open>
+            <summary>Loaded revision</summary>
+            <dl className="repository-revision">
+              <dt>Repository</dt><dd>{repo.label}</dd>
+              <dt>Ref</dt><dd>{repo.ref}</dd>
+              <dt>Commit</dt><dd><code>{repo.revision}</code></dd>
+            </dl>
+          </details>}
           {error && <p role="alert">{error}</p>}
           <div className="publication-buttons">
             <button className="button" type="button" disabled={busy} onClick={() => void chooseFolder()}><FolderOpen size={15} aria-hidden="true" /> Open folder</button>

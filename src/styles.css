@@ -169,6 +169,9 @@ h1 { font-size: clamp(1.9rem, 3vw, 2.375rem); letter-spacing: -.04em; line-heigh
 .publication-dialog p { overflow-wrap: anywhere; font-size: .875rem; color: var(--site-gray-600); }
 .publication-dialog label, .subscription-editor label { gap: .25rem; font-size: .875rem; }
 .publication-dialog input, .subscription-editor input { min-width: 0; padding: .42rem .55rem; background: transparent; border: 1px solid var(--site-gray-200); border-radius: .3rem; }
+.repository-revision { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .25rem .65rem; margin: 0; padding: .65rem; background: var(--site-gray-100); border-radius: .3rem; font-size: .8125rem; }
+.repository-revision dt { color: var(--site-gray-600); }
+.repository-revision dd { margin: 0; overflow-wrap: anywhere; }
 .publication-buttons { display: flex; flex-wrap: wrap; justify-content: end; gap: .5rem; margin-top: .35rem; }
 .config-dialog { width: min(36rem, calc(100% - 2rem)); }
 .config-dialog .config-checkbox { display: flex; align-items: center; gap: .5rem; }
